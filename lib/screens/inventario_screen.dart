@@ -24,7 +24,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
   bool _loading = true;
   String _filtroCategoria = 'Todos';
   List<String> _categorias = ['Todos'];
-  String _monedaSimbolo = 'S/';
+  String _monedaSimbolo = 'Q';
 
   @override
   void initState() {
@@ -48,7 +48,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
     final prefs = await SharedPreferences.getInstance();
     if (mounted) {
       setState(() {
-        _monedaSimbolo = prefs.getString('moneda_simbolo') ?? 'S/';
+        _monedaSimbolo = prefs.getString('moneda_simbolo') ?? 'Q';
       });
     }
   }

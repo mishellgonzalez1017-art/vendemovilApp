@@ -8,6 +8,7 @@ import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:image_picker/image_picker.dart';
 import '../utils/metodos_pago_config.dart';
+import '../utils/soporte_config.dart';
 import '../widgets/soporte_dialog.dart';
 
 class AjustesScreen extends StatefulWidget {
@@ -22,7 +23,7 @@ class _AjustesScreenState extends State<AjustesScreen> {
   final _telefonoCtrl = TextEditingController();
   final _rucCtrl = TextEditingController();
   final _mensajeCtrl = TextEditingController();
-  final _monedaSimboloCtrl = TextEditingController(text: 'S/');
+  final _monedaSimboloCtrl = TextEditingController(text: 'Q');
   double _anchoPapel = 58.0;
   String? _impresoraNombre;
   String? _impresoraMac;
@@ -48,7 +49,7 @@ class _AjustesScreenState extends State<AjustesScreen> {
     _rucCtrl.text = prefs.getString('negocio_ruc') ?? '';
     _mensajeCtrl.text =
         prefs.getString('negocio_mensaje') ?? '¡Gracias por su compra!';
-    _monedaSimboloCtrl.text = prefs.getString('moneda_simbolo') ?? 'S/';
+    _monedaSimboloCtrl.text = prefs.getString('moneda_simbolo') ?? 'Q';
     _anchoPapel = prefs.getDouble('impresora_ancho') ?? 58.0;
     _impresoraNombre = prefs.getString('impresora_nombre');
     _impresoraMac = prefs.getString('impresora_mac');
@@ -143,7 +144,7 @@ class _AjustesScreenState extends State<AjustesScreen> {
         children: [
           _buildSection('Datos del Negocio', Icons.store_rounded, [
             _buildField('Nombre del negocio', _nombreCtrl, Icons.business),
-            _buildField('RUC', _rucCtrl, Icons.badge_outlined),
+            _buildField('NIT', _rucCtrl, Icons.badge_outlined),
             _buildField(
               'Dirección',
               _direccionCtrl,
@@ -151,7 +152,7 @@ class _AjustesScreenState extends State<AjustesScreen> {
             ),
             _buildField('Teléfono', _telefonoCtrl, Icons.phone_outlined),
             _buildField(
-              'Símbolo de Moneda (ej. S/ , \$ , €)',
+              'Símbolo de Moneda (ej. Q , \$ , €)',
               _monedaSimboloCtrl,
               Icons.attach_money_rounded,
             ),
@@ -381,11 +382,11 @@ class _AjustesScreenState extends State<AjustesScreen> {
                 ),
               ),
               title: const Text(
-                'Edax Agency',
+                SoporteConfig.desarrollador,
                 style: TextStyle(fontWeight: FontWeight.w600),
               ),
               subtitle: const Text(
-                'WhatsApp +51 973 282 798 · Versión Pro+',
+                'WhatsApp ${SoporteConfig.whatsappDisplay} · Soporte y mensualidad',
                 style: TextStyle(fontSize: 12),
               ),
               trailing: const Icon(

@@ -8,22 +8,22 @@ class MetodosPagoConfig {
 
   static const labels = {
     'efectivo': 'Efectivo',
-    'yape': 'Yape',
-    'plin': 'Plin',
+    'yape': 'Transferencia',
+    'plin': 'Tigo Money',
     'tarjeta': 'Tarjeta',
   };
 
   static const icons = {
     'efectivo': Icons.money_rounded,
-    'yape': Icons.phone_android_rounded,
-    'plin': Icons.phone_iphone_rounded,
+    'yape': Icons.account_balance_rounded,
+    'plin': Icons.phone_android_rounded,
     'tarjeta': Icons.credit_card_rounded,
   };
 
   static const colors = {
     'efectivo': AppTheme.success,
-    'yape': Color(0xFF6C2DC7),
-    'plin': Color(0xFF00BFA5),
+    'yape': Color(0xFF1565C0),
+    'plin': Color(0xFF0D47A1),
     'tarjeta': AppTheme.info,
   };
 

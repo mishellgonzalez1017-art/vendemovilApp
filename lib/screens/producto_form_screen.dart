@@ -419,8 +419,8 @@ class _ProductoFormScreenState extends State<ProductoFormScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildLabel(_tipoVenta == TipoVenta.peso
-                          ? 'Precio Compra (S/ por kg)'
-                          : 'Precio Compra (S/)'),
+                          ? 'Precio Compra (Q por kg)'
+                          : 'Precio Compra (Q)'),
                       TextFormField(
                         controller: _precioCompraCtrl,
                         decoration: const InputDecoration(hintText: '0.00', prefixIcon: Icon(Icons.money_off_outlined)),
@@ -435,8 +435,8 @@ class _ProductoFormScreenState extends State<ProductoFormScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildLabel(_tipoVenta == TipoVenta.peso
-                          ? 'Precio Venta (S/ por kg)'
-                          : 'Precio Venta (S/)'),
+                          ? 'Precio Venta (Q por kg)'
+                          : 'Precio Venta (Q)'),
                       TextFormField(
                         controller: _precioVentaCtrl,
                         decoration: const InputDecoration(hintText: '0.00', prefixIcon: Icon(Icons.attach_money)),

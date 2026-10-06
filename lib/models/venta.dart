@@ -8,7 +8,7 @@ class Venta {
   final double subtotal;
   final double descuento;
   final double total;
-  final String metodoPago; // 'efectivo', 'yape', 'plin', 'tarjeta'
+  final String metodoPago; // 'efectivo', 'yape' (Transferencia), 'plin' (Tigo Money), 'tarjeta'
   final double? montoPagado;
   final double? vuelto;
   final DateTime fecha;

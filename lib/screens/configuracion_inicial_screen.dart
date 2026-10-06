@@ -69,7 +69,7 @@ class _ConfiguracionInicialScreenState
             const SizedBox(height: 8),
             const Text(
               'Estos datos aparecerán en tus tickets impresos. '
-              'Puedes cambiar RUC, moneda y más en Ajustes después.',
+              'Puedes cambiar NIT, moneda y más en Ajustes después.',
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 16),
             ),
             const SizedBox(height: 32),

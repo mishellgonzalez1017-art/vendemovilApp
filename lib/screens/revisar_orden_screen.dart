@@ -26,7 +26,7 @@ class _RevisarOrdenScreenState extends State<RevisarOrdenScreen> {
   String? _yapeQrPath;
   String? _plinQrPath;
   List<String> _metodosHabilitados = List.from(MetodosPagoConfig.todos);
-  String _monedaSimbolo = 'S/';
+  String _monedaSimbolo = 'Q';
   Venta? _ventaOk;
   String? _avisoImpresion;
   bool _guardando = false;
@@ -47,7 +47,7 @@ class _RevisarOrdenScreenState extends State<RevisarOrdenScreen> {
         _yapeQrPath = prefs.getString('yape_qr_path');
         _plinQrPath = prefs.getString('plin_qr_path');
         _metodosHabilitados = habilitados;
-        _monedaSimbolo = prefs.getString('moneda_simbolo') ?? 'S/';
+        _monedaSimbolo = prefs.getString('moneda_simbolo') ?? 'Q';
         if (!_metodosHabilitados.contains(_metodoPago)) {
           _metodoPago = _metodosHabilitados.first;
         }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../utils/soporte_config.dart';
 
 Future<void> showTerminosCondicionesDialog(BuildContext context) {
   return showDialog<void>(
@@ -36,7 +37,7 @@ Future<void> showTerminosCondicionesDialog(BuildContext context) {
               ),
               const SizedBox(height: 8),
               const Text(
-                'WhatsApp / teléfono: +51 973 282 798',
+                'WhatsApp / teléfono: ${SoporteConfig.whatsappDisplay}',
                 style: TextStyle(fontSize: 14, height: 1.45),
               ),
               const SizedBox(height: 16),
@@ -46,7 +47,7 @@ Future<void> showTerminosCondicionesDialog(BuildContext context) {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Edax Agency — desarrollador del sistema Vende Móvil.',
+                '${SoporteConfig.desarrollador} — desarrollador del sistema Vende Móvil.',
                 style: TextStyle(fontSize: 14, height: 1.45),
               ),
               const SizedBox(height: 16),

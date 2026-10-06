@@ -33,7 +33,7 @@ class _ScannerPosScreenState extends State<ScannerPosScreen> {
   bool _cameraOn = true;
   String? _lastScanned;
   DateTime? _lastScanTime;
-  String _monedaSimbolo = 'S/';
+  String _monedaSimbolo = 'Q';
 
   @override
   void initState() {
@@ -49,7 +49,7 @@ class _ScannerPosScreenState extends State<ScannerPosScreen> {
     final prefs = await SharedPreferences.getInstance();
     if (mounted) {
       setState(() {
-        _monedaSimbolo = prefs.getString('moneda_simbolo') ?? 'S/';
+        _monedaSimbolo = prefs.getString('moneda_simbolo') ?? 'Q';
       });
     }
   }
