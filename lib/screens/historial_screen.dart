@@ -14,6 +14,7 @@ import '../utils/currency_formatter.dart';
 import '../utils/sound_player.dart';
 import '../utils/whatsapp_share.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config/app_config.dart';
 
 class HistorialScreen extends StatefulWidget {
   const HistorialScreen({super.key});
@@ -27,7 +28,7 @@ class _HistorialScreenState extends State<HistorialScreen> {
   List<Venta> _ventas = [];
   bool _loading = true;
   String _filtro = 'hoy';
-  String _monedaSimbolo = 'S/';
+  String _monedaSimbolo = 'Q';
 
   @override
   void initState() {
@@ -40,7 +41,7 @@ class _HistorialScreenState extends State<HistorialScreen> {
     final prefs = await SharedPreferences.getInstance();
     if (mounted) {
       setState(() {
-        _monedaSimbolo = prefs.getString('moneda_simbolo') ?? 'S/';
+        _monedaSimbolo = prefs.getString('moneda_simbolo') ?? 'Q';
       });
     }
   }
@@ -389,7 +390,7 @@ class _HistorialScreenState extends State<HistorialScreen> {
 
       await Share.shareXFiles([
         XFile(path),
-      ], text: 'Reporte de Ventas Vende Móvil');
+      ], text: 'Reporte de Ventas ${AppConfig.nombre}');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -479,12 +480,12 @@ class _HistorialScreenState extends State<HistorialScreen> {
     String label;
     switch (metodo) {
       case 'yape':
-        color = const Color(0xFF6C2DC7);
-        label = 'Yape';
+        color = const Color(0xFF1565C0);
+        label = 'Transferencia';
         break;
       case 'plin':
-        color = const Color(0xFF00BFA5);
-        label = 'Plin';
+        color = const Color(0xFF0D47A1);
+        label = 'Tigo Money';
         break;
       case 'tarjeta':
         color = AppTheme.info;

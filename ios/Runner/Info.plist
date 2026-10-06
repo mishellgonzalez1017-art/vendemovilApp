@@ -31,7 +31,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Vende Móvil usa la cámara para escanear códigos de barras y QR.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Vende Móvil accede a tus fotos para subir el QR de Yape o Plin y la imagen del producto.</string>
+	<string>Vende Móvil accede a tus fotos para subir el QR de transferencia o Tigo Money y la imagen del producto.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Vende Móvil puede guardar imágenes relacionadas con tu negocio.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>

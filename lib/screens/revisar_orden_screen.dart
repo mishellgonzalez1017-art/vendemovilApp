@@ -12,6 +12,8 @@ import '../utils/sound_player.dart';
 import '../utils/whatsapp_share.dart';
 import '../widgets/safe_bottom_bar.dart';
 import '../models/venta.dart';
+import '../services/license_service.dart';
+import 'licencia_screen.dart';
 
 class RevisarOrdenScreen extends StatefulWidget {
   const RevisarOrdenScreen({super.key});
@@ -26,7 +28,7 @@ class _RevisarOrdenScreenState extends State<RevisarOrdenScreen> {
   String? _yapeQrPath;
   String? _plinQrPath;
   List<String> _metodosHabilitados = List.from(MetodosPagoConfig.todos);
-  String _monedaSimbolo = 'S/';
+  String _monedaSimbolo = 'Q';
   Venta? _ventaOk;
   String? _avisoImpresion;
   bool _guardando = false;
@@ -47,7 +49,7 @@ class _RevisarOrdenScreenState extends State<RevisarOrdenScreen> {
         _yapeQrPath = prefs.getString('yape_qr_path');
         _plinQrPath = prefs.getString('plin_qr_path');
         _metodosHabilitados = habilitados;
-        _monedaSimbolo = prefs.getString('moneda_simbolo') ?? 'S/';
+        _monedaSimbolo = prefs.getString('moneda_simbolo') ?? 'Q';
         if (!_metodosHabilitados.contains(_metodoPago)) {
           _metodoPago = _metodosHabilitados.first;
         }
@@ -79,6 +81,10 @@ class _RevisarOrdenScreenState extends State<RevisarOrdenScreen> {
   }
 
   Future<void> _procesar(CarritoProvider carrito) async {
+    if (!LicenseService.instance.puedeVender) {
+      await mostrarLicenciaVencida(context);
+      return;
+    }
     if (_metodoPago == 'efectivo') {
       final monto = double.tryParse(_montoCtrl.text) ?? 0;
       if (monto < carrito.total) {

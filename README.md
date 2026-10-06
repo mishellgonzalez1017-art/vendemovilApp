@@ -55,7 +55,7 @@ flutter build apk --release
 
 ## Permisos iOS
 
-Cámara (escáner), fotos (QR Yape/Plin), Bluetooth (impresora) y ubicación para BLE.
+Cámara (escáner), fotos (QR de transferencia/Tigo Money), Bluetooth (impresora) y ubicación para BLE.
 
 ## Secretos
 

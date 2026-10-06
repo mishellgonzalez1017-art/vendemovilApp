@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../utils/soporte_config.dart';
+import '../config/app_config.dart';
 
 Future<void> showSoporteDialog(BuildContext context) {
   return showDialog<void>(
@@ -29,7 +30,7 @@ Future<void> showSoporteDialog(BuildContext context) {
               ),
               const SizedBox(height: 4),
               const Text(
-                'Desarrollador de Vende Móvil',
+                'Desarrollador de ${AppConfig.nombre}',
                 style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
               ),
               const SizedBox(height: 16),
@@ -44,15 +45,13 @@ Future<void> showSoporteDialog(BuildContext context) {
               ),
               const SizedBox(height: 16),
               const Text(
-                'Versión Pro+',
+                'Soporte y mantenimiento',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
               ),
               const SizedBox(height: 8),
               const Text(
-                '¿Necesitas una app más personalizada? Con la versión Pro+ '
-                'tus datos no se guardan solo en el teléfono: se sincronizan '
-                'en la nube para que puedas ver tu negocio desde todos tus '
-                'dispositivos.',
+                '¿Necesitas ayuda, renovar tu clave mensual o una mejora para '
+                'tu negocio? Escríbenos por WhatsApp y te atendemos.',
                 style: TextStyle(fontSize: 14, height: 1.45),
               ),
               const SizedBox(height: 12),
@@ -66,8 +65,7 @@ Future<void> showSoporteDialog(BuildContext context) {
                   ),
                 ),
                 child: const Text(
-                  'Escríbenos por WhatsApp con el mensaje:\n'
-                  '"quiero la version pro+"',
+                  'Escríbenos por WhatsApp y cuéntanos en qué podemos ayudarte.',
                   style: TextStyle(
                     fontSize: 13,
                     height: 1.45,
@@ -100,7 +98,7 @@ Future<void> showSoporteDialog(BuildContext context) {
             }
           },
           icon: const Icon(Icons.chat_rounded, size: 20),
-          label: const Text('WhatsApp Pro+'),
+          label: const Text('WhatsApp'),
         ),
       ],
     ),

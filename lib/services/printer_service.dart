@@ -6,13 +6,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/venta.dart';
 import '../utils/currency_formatter.dart';
 import '../utils/peso_formatter.dart';
+import '../config/app_config.dart';
 
 class PrinterService {
   static final PrinterService instance = PrinterService._();
   PrinterService._();
 
-  String _monedaSimbolo = 'S/';
-  String _nombreNegocio = 'VENDE MÓVIL';
+  String _monedaSimbolo = 'Q';
+  String _nombreNegocio = AppConfig.nombreMayus;
   String _direccion = '';
   String _telefono = '';
   String _ruc = '';
@@ -69,7 +70,7 @@ class PrinterService {
       anchoPapel: prefs.getDouble('impresora_ancho') ?? 58.0,
       mac: prefs.getString('impresora_mac'),
       printerName: prefs.getString('impresora_nombre'),
-      moneda: prefs.getString('moneda_simbolo') ?? 'S/',
+      moneda: prefs.getString('moneda_simbolo') ?? 'Q',
       vendedor: prefs.getString('vendedor_activo'),
     );
   }
@@ -93,9 +94,9 @@ class PrinterService {
       case 'efectivo':
         return 'Efectivo';
       case 'yape':
-        return 'Yape';
+        return 'Transferencia';
       case 'plin':
-        return 'Plin';
+        return 'Tigo Money';
       case 'tarjeta':
         return 'Tarjeta';
       default:
@@ -158,14 +159,14 @@ class PrinterService {
     await cargarDesdePrefs();
     final buf = StringBuffer();
     buf.writeln('*${_nombreNegocio.toUpperCase()}*');
-    if (_ruc.isNotEmpty) buf.writeln('RUC: $_ruc');
+    if (_ruc.isNotEmpty) buf.writeln('NIT: $_ruc');
     if (_direccion.isNotEmpty) buf.writeln(_direccion);
     if (_telefono.isNotEmpty) buf.writeln('Tel: $_telefono');
     for (final line in _lineasCuerpo(venta)) {
       buf.writeln(line);
     }
     buf.writeln(_mensajePie);
-    buf.writeln('Vende Movil v2.0');
+    buf.writeln('${AppConfig.nombreSinAcentos} v${AppConfig.version}');
     return buf.toString().trim();
   }
 
@@ -217,7 +218,7 @@ class PrinterService {
       negrita: true,
     );
     if (_ruc.isNotEmpty) {
-      bytes += _bytesCentrado('RUC: $_ruc');
+      bytes += _bytesCentrado('NIT: $_ruc');
     }
     if (_direccion.isNotEmpty) {
       bytes += _bytesCentrado(_direccion);
@@ -232,7 +233,7 @@ class PrinterService {
     }
 
     bytes += _bytesCentrado(_mensajePie);
-    bytes += _bytesCentrado('Vende Movil v2.0');
+    bytes += _bytesCentrado('${AppConfig.nombreSinAcentos} v${AppConfig.version}');
 
     bytes += generator.feed(2);
     bytes += generator.cut();

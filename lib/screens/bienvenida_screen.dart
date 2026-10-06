@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/terminos_condiciones_dialog.dart';
 import 'configuracion_inicial_screen.dart';
+import '../config/app_config.dart';
 
 class BienvenidaScreen extends StatelessWidget {
   const BienvenidaScreen({super.key});
@@ -58,7 +59,7 @@ class BienvenidaScreen extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 const Text(
-                                  'Vende Móvil',
+                                  AppConfig.nombre,
                                   style: TextStyle(
                                     fontSize: 36,
                                     fontWeight: FontWeight.bold,

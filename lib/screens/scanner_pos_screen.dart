@@ -19,6 +19,9 @@ import 'revisar_orden_screen.dart';
 import 'inventario_screen.dart';
 import 'historial_screen.dart';
 import 'ajustes_screen.dart';
+import '../config/app_config.dart';
+import '../services/license_service.dart';
+import 'licencia_screen.dart';
 
 class ScannerPosScreen extends StatefulWidget {
   const ScannerPosScreen({super.key});
@@ -33,7 +36,7 @@ class _ScannerPosScreenState extends State<ScannerPosScreen> {
   bool _cameraOn = true;
   String? _lastScanned;
   DateTime? _lastScanTime;
-  String _monedaSimbolo = 'S/';
+  String _monedaSimbolo = 'Q';
 
   @override
   void initState() {
@@ -49,7 +52,7 @@ class _ScannerPosScreenState extends State<ScannerPosScreen> {
     final prefs = await SharedPreferences.getInstance();
     if (mounted) {
       setState(() {
-        _monedaSimbolo = prefs.getString('moneda_simbolo') ?? 'S/';
+        _monedaSimbolo = prefs.getString('moneda_simbolo') ?? 'Q';
       });
     }
   }
@@ -114,6 +117,20 @@ class _ScannerPosScreenState extends State<ScannerPosScreen> {
     );
   }
 
+  /// Con la licencia vencida no se pueden agregar productos ni cobrar.
+  bool _avisoLicenciaAbierto = false;
+
+  bool _licenciaPermiteVender() {
+    if (LicenseService.instance.puedeVender) return true;
+    if (!_avisoLicenciaAbierto) {
+      _avisoLicenciaAbierto = true;
+      mostrarLicenciaVencida(context).whenComplete(() {
+        _avisoLicenciaAbierto = false;
+      });
+    }
+    return false;
+  }
+
   Future<void> _navigateTo(Widget screen) async {
     await _scannerCtrl.stop();
     if (mounted) {
@@ -129,6 +146,20 @@ class _ScannerPosScreenState extends State<ScannerPosScreen> {
     if (barcode?.rawValue == null) return;
 
     final code = barcode!.rawValue!;
+
+    if (!LicenseService.instance.puedeVender) {
+      // Evita repetir el aviso mientras la cámara sigue leyendo el mismo código.
+      if (_lastScanned == code &&
+          _lastScanTime != null &&
+          DateTime.now().difference(_lastScanTime!) <
+              const Duration(seconds: 4)) {
+        return;
+      }
+      _lastScanned = code;
+      _lastScanTime = DateTime.now();
+      _licenciaPermiteVender();
+      return;
+    }
 
     // Evitar escaneos duplicados rápidos
     if (_lastScanned == code &&
@@ -469,6 +500,7 @@ class _ScannerPosScreenState extends State<ScannerPosScreen> {
     Producto p,
     CarritoProvider carrito,
   ) async {
+    if (!_licenciaPermiteVender()) return;
     if (p.esPeso) {
       final enCarrito = carrito.cantidadEnCarrito(p.id);
       final disponible = p.stock - enCarrito;
@@ -600,6 +632,16 @@ class _ScannerPosScreenState extends State<ScannerPosScreen> {
                           size: Size.infinite,
                         ),
                       ),
+
+                    // Aviso de licencia (prueba / por vencer / vencida)
+                    Positioned(
+                      left: 16,
+                      right: 16,
+                      bottom: 16,
+                      child: LicenciaBanner(
+                        onTap: () => _navigateTo(const LicenciaScreen()),
+                      ),
+                    ),
 
                     // Botones flotantes a la derecha
                     Positioned(
@@ -953,7 +995,10 @@ class _ScannerPosScreenState extends State<ScannerPosScreen> {
                           child: ElevatedButton.icon(
                             onPressed: carrito.isEmpty
                                 ? null
-                                : () => _navigateTo(const RevisarOrdenScreen()),
+                                : () {
+                                if (!_licenciaPermiteVender()) return;
+                                _navigateTo(const RevisarOrdenScreen());
+                              },
                             icon: const Icon(
                               Icons.receipt_long_rounded,
                               size: 20,
@@ -1124,7 +1169,7 @@ class _ScannerPosScreenState extends State<ScannerPosScreen> {
               ),
               const SizedBox(height: 20),
               const Text(
-                'Vende Móvil',
+                AppConfig.nombre,
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 20),

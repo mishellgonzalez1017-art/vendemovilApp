@@ -67,3 +67,7 @@ firebase.json
 node_modules/
 *.db
 **/serviceAccount*.json
+
+# Licencias: nunca subir el secreto
+.vscode/launch.json
+.env.licencia

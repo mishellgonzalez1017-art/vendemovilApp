@@ -3,10 +3,10 @@ import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   // Colores primarios
-  static const Color primary = Color(0xFF2E7D6F);
-  static const Color primaryLight = Color(0xFF4CAF9E);
-  static const Color primaryDark = Color(0xFF1B5E50);
-  static const Color accent = Color(0xFF00BFA5);
+  static const Color primary = Color(0xFF7A1F3D);
+  static const Color primaryLight = Color(0xFFA8476A);
+  static const Color primaryDark = Color(0xFF55122B);
+  static const Color accent = Color(0xFFB8506F);
 
   // Colores de fondo - Tema Claro
   static const Color bgLight = Color(0xFFF5F7FA);
@@ -32,12 +32,12 @@ class AppTheme {
   static const Color borderLight = Color(0xFFF0F1F3);
 
   // Scanner
-  static const Color scannerCorner = Color(0xFF2E7D6F);
+  static const Color scannerCorner = Color(0xFF7A1F3D);
   static const Color scannerOverlay = Color(0x88000000);
 
   // Gradientes
   static const LinearGradient primaryGradient = LinearGradient(
-    colors: [primary, Color(0xFF34A085)],
+    colors: [primary, Color(0xFF9A2F52)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );

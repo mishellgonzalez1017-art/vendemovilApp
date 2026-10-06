@@ -8,7 +8,11 @@ import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:image_picker/image_picker.dart';
 import '../utils/metodos_pago_config.dart';
+import '../utils/soporte_config.dart';
 import '../widgets/soporte_dialog.dart';
+import '../config/app_config.dart';
+import '../services/license_service.dart';
+import 'licencia_screen.dart';
 
 class AjustesScreen extends StatefulWidget {
   const AjustesScreen({super.key});
@@ -22,7 +26,7 @@ class _AjustesScreenState extends State<AjustesScreen> {
   final _telefonoCtrl = TextEditingController();
   final _rucCtrl = TextEditingController();
   final _mensajeCtrl = TextEditingController();
-  final _monedaSimboloCtrl = TextEditingController(text: 'S/');
+  final _monedaSimboloCtrl = TextEditingController(text: 'Q');
   double _anchoPapel = 58.0;
   String? _impresoraNombre;
   String? _impresoraMac;
@@ -42,13 +46,13 @@ class _AjustesScreenState extends State<AjustesScreen> {
 
   Future<void> _cargar() async {
     final prefs = await SharedPreferences.getInstance();
-    _nombreCtrl.text = prefs.getString('negocio_nombre') ?? 'VENDE MÓVIL';
+    _nombreCtrl.text = prefs.getString('negocio_nombre') ?? AppConfig.nombreMayus;
     _direccionCtrl.text = prefs.getString('negocio_direccion') ?? '';
     _telefonoCtrl.text = prefs.getString('negocio_telefono') ?? '';
     _rucCtrl.text = prefs.getString('negocio_ruc') ?? '';
     _mensajeCtrl.text =
         prefs.getString('negocio_mensaje') ?? '¡Gracias por su compra!';
-    _monedaSimboloCtrl.text = prefs.getString('moneda_simbolo') ?? 'S/';
+    _monedaSimboloCtrl.text = prefs.getString('moneda_simbolo') ?? 'Q';
     _anchoPapel = prefs.getDouble('impresora_ancho') ?? 58.0;
     _impresoraNombre = prefs.getString('impresora_nombre');
     _impresoraMac = prefs.getString('impresora_mac');
@@ -143,7 +147,7 @@ class _AjustesScreenState extends State<AjustesScreen> {
         children: [
           _buildSection('Datos del Negocio', Icons.store_rounded, [
             _buildField('Nombre del negocio', _nombreCtrl, Icons.business),
-            _buildField('RUC', _rucCtrl, Icons.badge_outlined),
+            _buildField('NIT', _rucCtrl, Icons.badge_outlined),
             _buildField(
               'Dirección',
               _direccionCtrl,
@@ -151,7 +155,7 @@ class _AjustesScreenState extends State<AjustesScreen> {
             ),
             _buildField('Teléfono', _telefonoCtrl, Icons.phone_outlined),
             _buildField(
-              'Símbolo de Moneda (ej. S/ , \$ , €)',
+              'Símbolo de Moneda (ej. Q , \$ , €)',
               _monedaSimboloCtrl,
               Icons.attach_money_rounded,
             ),
@@ -365,6 +369,44 @@ class _AjustesScreenState extends State<AjustesScreen> {
           ], collapsible: false),
           const SizedBox(height: 16),
 
+          _buildSection('Licencia', Icons.key_rounded, [
+            ListenableBuilder(
+              listenable: LicenseService.instance,
+              builder: (context, _) => ListTile(
+                leading: Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.key_rounded,
+                    color: AppTheme.primary,
+                    size: 20,
+                  ),
+                ),
+                title: const Text(
+                  'Licencia',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  LicenseService.instance.resumen,
+                  style: const TextStyle(fontSize: 12),
+                ),
+                trailing: const Icon(
+                  Icons.chevron_right,
+                  color: AppTheme.textMuted,
+                ),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LicenciaScreen()),
+                ),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 16),
+
           _buildSection('Soporte', Icons.support_agent_rounded, [
             ListTile(
               leading: Container(
@@ -381,11 +423,11 @@ class _AjustesScreenState extends State<AjustesScreen> {
                 ),
               ),
               title: const Text(
-                'Edax Agency',
+                SoporteConfig.desarrollador,
                 style: TextStyle(fontWeight: FontWeight.w600),
               ),
               subtitle: const Text(
-                'WhatsApp +51 973 282 798 · Versión Pro+',
+                'WhatsApp ${SoporteConfig.whatsappDisplay} · Soporte y mensualidad',
                 style: TextStyle(fontSize: 12),
               ),
               trailing: const Icon(
@@ -645,7 +687,7 @@ class _AjustesScreenState extends State<AjustesScreen> {
       bytes.addAll([0x1B, 0x40]); // Init
       bytes.addAll([0x1B, 0x61, 0x01]); // Align center
       bytes.addAll("==========================\n".codeUnits);
-      bytes.addAll("     VENDE MOVIL POS      \n".codeUnits);
+      bytes.addAll("     ${AppConfig.nombreSinAcentosMayus} POS      \n".codeUnits);
       bytes.addAll("    PRUEBA DE CONEXION    \n".codeUnits);
       bytes.addAll("==========================\n\n\n\n".codeUnits);
       await PrintBluetoothThermal.writeBytes(bytes);

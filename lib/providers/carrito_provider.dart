@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 import '../models/producto.dart';
 import '../models/venta.dart';
 import '../services/database_service.dart';
+import '../services/license_service.dart';
 import '../utils/peso_formatter.dart';
 
 /// Provider central del carrito de ventas
@@ -104,6 +105,9 @@ class CarritoProvider extends ChangeNotifier {
     required String metodoPago,
     double? montoPagado,
   }) async {
+    if (!LicenseService.instance.puedeVender) {
+      throw StateError('Licencia vencida');
+    }
     final ventaId = _uuid.v4();
     final itemsConVentaId = _items
         .map(

@@ -3,6 +3,7 @@ import '../theme/app_theme.dart';
 import '../services/onboarding_service.dart';
 import 'bienvenida_screen.dart';
 import 'scanner_pos_screen.dart';
+import '../config/app_config.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -87,7 +88,7 @@ class _SplashScreenState extends State<SplashScreen>
                 ),
                 const SizedBox(height: 24),
                 const Text(
-                  'Vende Móvil',
+                  AppConfig.nombre,
                   style: TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.bold,
