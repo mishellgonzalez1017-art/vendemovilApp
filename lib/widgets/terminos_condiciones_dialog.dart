@@ -63,10 +63,10 @@ Future<void> showTerminosCondicionesDialog(BuildContext context) {
                 ),
                 child: const Text(
                   'Los tickets impresos por ${AppConfig.nombre} son comprobantes '
-                  'simples de venta. No constituyen facturas, boletas de '
-                  'venta ni documentos tributarios vinculados a SUNAT. '
+                  'simples de venta. No constituyen facturas ni documentos '
+                  'tributarios vinculados a la SAT. '
                   'Para emitir comprobantes oficiales, debes usar los '
-                  'sistemas autorizados por la normativa peruana.',
+                  'sistemas autorizados por la normativa de Guatemala.',
                   style: TextStyle(
                     fontSize: 13,
                     height: 1.45,
