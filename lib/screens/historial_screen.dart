@@ -14,6 +14,7 @@ import '../utils/currency_formatter.dart';
 import '../utils/sound_player.dart';
 import '../utils/whatsapp_share.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config/app_config.dart';
 
 class HistorialScreen extends StatefulWidget {
   const HistorialScreen({super.key});
@@ -389,7 +390,7 @@ class _HistorialScreenState extends State<HistorialScreen> {
 
       await Share.shareXFiles([
         XFile(path),
-      ], text: 'Reporte de Ventas Vende Móvil');
+      ], text: 'Reporte de Ventas ${AppConfig.nombre}');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../utils/soporte_config.dart';
+import '../config/app_config.dart';
 
 Future<void> showTerminosCondicionesDialog(BuildContext context) {
   return showDialog<void>(
@@ -23,7 +24,7 @@ Future<void> showTerminosCondicionesDialog(BuildContext context) {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Vende Móvil es un sistema de punto de venta (POS) para uso '
+                '${AppConfig.nombre} es un sistema de punto de venta (POS) para uso '
                 'personal o comercial. Los datos de productos, ventas e '
                 'inventario se almacenan localmente en tu dispositivo. '
                 'Eres responsable de la información que ingresas: precios, '
@@ -47,7 +48,7 @@ Future<void> showTerminosCondicionesDialog(BuildContext context) {
               ),
               const SizedBox(height: 8),
               const Text(
-                '${SoporteConfig.desarrollador} — desarrollador del sistema Vende Móvil.',
+                '${SoporteConfig.desarrollador} — desarrollador del sistema ${AppConfig.nombre}.',
                 style: TextStyle(fontSize: 14, height: 1.45),
               ),
               const SizedBox(height: 16),
@@ -61,7 +62,7 @@ Future<void> showTerminosCondicionesDialog(BuildContext context) {
                   ),
                 ),
                 child: const Text(
-                  'Los tickets impresos por Vende Móvil son comprobantes '
+                  'Los tickets impresos por ${AppConfig.nombre} son comprobantes '
                   'simples de venta. No constituyen facturas, boletas de '
                   'venta ni documentos tributarios vinculados a SUNAT. '
                   'Para emitir comprobantes oficiales, debes usar los '

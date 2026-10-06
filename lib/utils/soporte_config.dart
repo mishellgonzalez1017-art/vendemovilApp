@@ -1,12 +1,13 @@
 import 'package:url_launcher/url_launcher.dart';
+import '../config/app_config.dart';
 
 /// Soporte y mantenimiento — WhatsApp.
 class SoporteConfig {
   // TODO: poner el número real (código de país 502 + 8 dígitos).
   static const whatsappNumero = '502XXXXXXXX';
   static const whatsappDisplay = '+502 XXXX XXXX';
-  static const desarrollador = 'Vende Móvil';
-  static const mensajePro = 'Hola, necesito soporte con Vende Móvil';
+  static const desarrollador = AppConfig.nombre;
+  static const mensajePro = 'Hola, necesito soporte con ${AppConfig.nombre}';
 
   static Uri whatsappUri({String? mensaje}) {
     final base = 'https://wa.me/$whatsappNumero';

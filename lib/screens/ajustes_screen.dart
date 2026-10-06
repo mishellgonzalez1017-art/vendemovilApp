@@ -10,6 +10,9 @@ import 'package:image_picker/image_picker.dart';
 import '../utils/metodos_pago_config.dart';
 import '../utils/soporte_config.dart';
 import '../widgets/soporte_dialog.dart';
+import '../config/app_config.dart';
+import '../services/license_service.dart';
+import 'licencia_screen.dart';
 
 class AjustesScreen extends StatefulWidget {
   const AjustesScreen({super.key});
@@ -43,7 +46,7 @@ class _AjustesScreenState extends State<AjustesScreen> {
 
   Future<void> _cargar() async {
     final prefs = await SharedPreferences.getInstance();
-    _nombreCtrl.text = prefs.getString('negocio_nombre') ?? 'VENDE MÓVIL';
+    _nombreCtrl.text = prefs.getString('negocio_nombre') ?? AppConfig.nombreMayus;
     _direccionCtrl.text = prefs.getString('negocio_direccion') ?? '';
     _telefonoCtrl.text = prefs.getString('negocio_telefono') ?? '';
     _rucCtrl.text = prefs.getString('negocio_ruc') ?? '';
@@ -366,6 +369,44 @@ class _AjustesScreenState extends State<AjustesScreen> {
           ], collapsible: false),
           const SizedBox(height: 16),
 
+          _buildSection('Licencia', Icons.key_rounded, [
+            ListenableBuilder(
+              listenable: LicenseService.instance,
+              builder: (context, _) => ListTile(
+                leading: Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.key_rounded,
+                    color: AppTheme.primary,
+                    size: 20,
+                  ),
+                ),
+                title: const Text(
+                  'Licencia',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  LicenseService.instance.resumen,
+                  style: const TextStyle(fontSize: 12),
+                ),
+                trailing: const Icon(
+                  Icons.chevron_right,
+                  color: AppTheme.textMuted,
+                ),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LicenciaScreen()),
+                ),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 16),
+
           _buildSection('Soporte', Icons.support_agent_rounded, [
             ListTile(
               leading: Container(
@@ -646,7 +687,7 @@ class _AjustesScreenState extends State<AjustesScreen> {
       bytes.addAll([0x1B, 0x40]); // Init
       bytes.addAll([0x1B, 0x61, 0x01]); // Align center
       bytes.addAll("==========================\n".codeUnits);
-      bytes.addAll("     VENDE MOVIL POS      \n".codeUnits);
+      bytes.addAll("     ${AppConfig.nombreSinAcentosMayus} POS      \n".codeUnits);
       bytes.addAll("    PRUEBA DE CONEXION    \n".codeUnits);
       bytes.addAll("==========================\n\n\n\n".codeUnits);
       await PrintBluetoothThermal.writeBytes(bytes);

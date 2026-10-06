@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../utils/soporte_config.dart';
+import '../config/app_config.dart';
 
 Future<void> showSoporteDialog(BuildContext context) {
   return showDialog<void>(
@@ -29,7 +30,7 @@ Future<void> showSoporteDialog(BuildContext context) {
               ),
               const SizedBox(height: 4),
               const Text(
-                'Desarrollador de Vende Móvil',
+                'Desarrollador de ${AppConfig.nombre}',
                 style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
               ),
               const SizedBox(height: 16),

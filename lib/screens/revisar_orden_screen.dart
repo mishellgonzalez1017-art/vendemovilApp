@@ -12,6 +12,8 @@ import '../utils/sound_player.dart';
 import '../utils/whatsapp_share.dart';
 import '../widgets/safe_bottom_bar.dart';
 import '../models/venta.dart';
+import '../services/license_service.dart';
+import 'licencia_screen.dart';
 
 class RevisarOrdenScreen extends StatefulWidget {
   const RevisarOrdenScreen({super.key});
@@ -79,6 +81,10 @@ class _RevisarOrdenScreenState extends State<RevisarOrdenScreen> {
   }
 
   Future<void> _procesar(CarritoProvider carrito) async {
+    if (!LicenseService.instance.puedeVender) {
+      await mostrarLicenciaVencida(context);
+      return;
+    }
     if (_metodoPago == 'efectivo') {
       final monto = double.tryParse(_montoCtrl.text) ?? 0;
       if (monto < carrito.total) {

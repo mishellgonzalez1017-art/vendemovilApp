@@ -6,13 +6,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/venta.dart';
 import '../utils/currency_formatter.dart';
 import '../utils/peso_formatter.dart';
+import '../config/app_config.dart';
 
 class PrinterService {
   static final PrinterService instance = PrinterService._();
   PrinterService._();
 
   String _monedaSimbolo = 'Q';
-  String _nombreNegocio = 'VENDE MÓVIL';
+  String _nombreNegocio = AppConfig.nombreMayus;
   String _direccion = '';
   String _telefono = '';
   String _ruc = '';
@@ -165,7 +166,7 @@ class PrinterService {
       buf.writeln(line);
     }
     buf.writeln(_mensajePie);
-    buf.writeln('Vende Movil v2.0');
+    buf.writeln('${AppConfig.nombreSinAcentos} v${AppConfig.version}');
     return buf.toString().trim();
   }
 
@@ -232,7 +233,7 @@ class PrinterService {
     }
 
     bytes += _bytesCentrado(_mensajePie);
-    bytes += _bytesCentrado('Vende Movil v2.0');
+    bytes += _bytesCentrado('${AppConfig.nombreSinAcentos} v${AppConfig.version}');
 
     bytes += generator.feed(2);
     bytes += generator.cut();
