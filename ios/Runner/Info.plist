@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Vende Móvil</string>
+	<string>Vende GT</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Vende Móvil</string>
+	<string>Vende GT</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -29,15 +29,15 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSCameraUsageDescription</key>
-	<string>Vende Móvil usa la cámara para escanear códigos de barras y QR.</string>
+	<string>Vende GT usa la cámara para escanear códigos de barras y QR.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Vende Móvil accede a tus fotos para subir el QR de transferencia o Tigo Money y la imagen del producto.</string>
+	<string>Vende GT accede a tus fotos para subir el QR de transferencia o Tigo Money y la imagen del producto.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Vende Móvil puede guardar imágenes relacionadas con tu negocio.</string>
+	<string>Vende GT puede guardar imágenes relacionadas con tu negocio.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Vende Móvil usa Bluetooth para conectar la impresora térmica.</string>
+	<string>Vende GT usa Bluetooth para conectar la impresora térmica.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>Vende Móvil usa Bluetooth para conectar la impresora térmica.</string>
+	<string>Vende GT usa Bluetooth para conectar la impresora térmica.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>La ubicación ayuda a encontrar impresoras Bluetooth cercanas.</string>
 	<key>LSApplicationQueriesSchemes</key>

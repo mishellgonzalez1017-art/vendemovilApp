@@ -43,7 +43,7 @@ En VS Code puedes dejarlo fijo en `.vscode/launch.json`
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Vende Móvil",
+      "name": "Vende GT",
       "request": "launch",
       "type": "dart",
       "args": ["--dart-define=LICENSE_SECRET=tu-secreto"]

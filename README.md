@@ -1,9 +1,9 @@
-# Vende Móvil
+# Vende GT
 
-POS Flutter (Android + iOS): venta por unidad o kilos, escáner, tickets térmicos y WhatsApp.
+POS Flutter (Android + iOS) para tiendas de Guatemala: venta por unidad o kilos, escáner, tickets térmicos y WhatsApp. Moneda: quetzales (Q). Colores: corinto.
 
 **Versión:** 2.0.0+2  
-**Bundle / applicationId:** `com.vendemovil`
+**Bundle / applicationId:** `com.vendemovil` (se deja igual a propósito: cambiarlo haría que Android lo trate como otra app y se perderían los datos instalados).
 
 App 100% local en el dispositivo. Sin Firebase ni servidor.
 
@@ -21,7 +21,7 @@ Necesitas cuenta **Apple Developer** (99 USD/año). Con cuenta gratis de Apple n
 
 ### 2. Codemagic
 
-1. Conecta el repo [rossellmestanza/vendemovilApp](https://github.com/rossellmestanza/vendemovilApp).
+1. Conecta el repo [mishellgonzalez1017-art/vendemovilApp](https://github.com/mishellgonzalez1017-art/vendemovilApp).
 2. **Teams → Code signing identities**: inicia sesión con Apple Developer.
 3. Distribution: **Ad Hoc** (no App Store). Bundle ID: `com.vendemovil`.
 4. Lanza el workflow **iOS IPA para mi iPhone (Ad Hoc)**.
@@ -60,3 +60,11 @@ Cámara (escáner), fotos (QR de transferencia/Tigo Money), Bluetooth (impresora
 ## Secretos
 
 No se suben: `key.properties`, keystores, `.env`, `google-services.json`.
+
+## Marca
+
+- Nombre, en un solo lugar: `lib/config/app_config.dart`. El nombre bajo el ícono está en
+  `android/app/src/main/AndroidManifest.xml` y `ios/Runner/Info.plist`.
+- Colores: `lib/theme/app_theme.dart` (corinto `#7A1F3D`).
+- Ícono: `assets/icon/logo.png`. Si lo cambias, regenera los íconos con
+  `dart run flutter_launcher_icons`.

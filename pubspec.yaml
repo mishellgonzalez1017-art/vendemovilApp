@@ -1,5 +1,5 @@
 name: vendemas
-description: "Vende Móvil - Sistema POS con escáner de código de barras e impresión térmica"
+description: "Vende GT - Sistema POS con escáner de código de barras e impresión térmica"
 publish_to: 'none'
 version: 2.0.0+2
 
@@ -39,7 +39,6 @@ flutter:
   assets:
     - assets/icon/
     - assets/sounds/
-    - assets/imgvendemovil.png
 
 flutter_launcher_icons:
   android: true

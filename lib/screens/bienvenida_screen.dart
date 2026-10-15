@@ -34,9 +34,21 @@ class BienvenidaScreen extends StatelessWidget {
                       child: Stack(
                         alignment: Alignment.bottomCenter,
                         children: [
-                          Image.asset(
-                            'assets/imgvendemovil.png',
-                            fit: BoxFit.contain,
+                          AspectRatio(
+                            aspectRatio: 1,
+                            child: Container(
+                              decoration: const BoxDecoration(
+                                gradient: AppTheme.primaryGradient,
+                              ),
+                              alignment: Alignment.topCenter,
+                              padding: const EdgeInsets.only(top: 40),
+                              child: Image.asset(
+                                'assets/icon/logo.png',
+                                width: 150,
+                                height: 150,
+                                fit: BoxFit.contain,
+                              ),
+                            ),
                           ),
                           Positioned.fill(
                             child: Container(
