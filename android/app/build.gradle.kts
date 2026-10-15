@@ -28,7 +28,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.vendemovil"
+        applicationId = "com.vendegt.app"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

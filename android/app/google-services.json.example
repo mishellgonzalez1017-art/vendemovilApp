@@ -9,7 +9,7 @@
       "client_info": {
         "mobilesdk_app_id": "YOUR_ANDROID_APP_ID",
         "android_client_info": {
-          "package_name": "com.vendemovil"
+          "package_name": "com.vendegt.app"
         }
       },
       "oauth_client": [],

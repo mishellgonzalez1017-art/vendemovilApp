@@ -30,9 +30,9 @@ workflows:
       cocoapods: default
       ios_signing:
         distribution_type: ad_hoc
-        bundle_identifier: com.vendemovil
+        bundle_identifier: com.vendegt.app
       vars:
-        BUNDLE_ID: com.vendemovil
+        BUNDLE_ID: com.vendegt.app
         XCODE_WORKSPACE: ios/Runner.xcworkspace
         XCODE_SCHEME: Runner
     scripts:

@@ -3,7 +3,7 @@
 POS Flutter (Android + iOS) para tiendas de Guatemala: venta por unidad o kilos, escáner, tickets térmicos y WhatsApp. Moneda: quetzales (Q). Colores: corinto.
 
 **Versión:** 2.0.0+2  
-**Bundle / applicationId:** `com.vendemovil` (se deja igual a propósito: cambiarlo haría que Android lo trate como otra app y se perderían los datos instalados).
+**Bundle / applicationId:** `com.vendegt.app` (propio de Vende GT; es distinto del de la app original para que no choquen en el celular ni en Google Play).
 
 App 100% local en el dispositivo. Sin Firebase ni servidor.
 
@@ -17,13 +17,13 @@ Necesitas cuenta **Apple Developer** (99 USD/año). Con cuenta gratis de Apple n
 
 1. En el iPhone: **Ajustes → General → Información**. Copia el **UDID** (o conéctalo a un Mac / usa [udid.tech](https://udid.tech) / Finder).
 2. En [developer.apple.com](https://developer.apple.com) → **Certificates, Identifiers & Profiles** → **Devices** → agrega el iPhone (nombre + UDID).
-3. Crea el App ID **com.vendemovil** si no existe.
+3. Crea el App ID **com.vendegt.app** si no existe.
 
 ### 2. Codemagic
 
 1. Conecta el repo [mishellgonzalez1017-art/vendemovilApp](https://github.com/mishellgonzalez1017-art/vendemovilApp).
 2. **Teams → Code signing identities**: inicia sesión con Apple Developer.
-3. Distribution: **Ad Hoc** (no App Store). Bundle ID: `com.vendemovil`.
+3. Distribution: **Ad Hoc** (no App Store). Bundle ID: `com.vendegt.app`.
 4. Lanza el workflow **iOS IPA para mi iPhone (Ad Hoc)**.
 5. Al terminar, descarga el archivo `.ipa`.
 
