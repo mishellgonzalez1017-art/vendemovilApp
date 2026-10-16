@@ -18,6 +18,7 @@ import '../models/venta.dart';
 import 'revisar_orden_screen.dart';
 import 'inventario_screen.dart';
 import 'historial_screen.dart';
+import 'caja_screen.dart';
 import 'ajustes_screen.dart';
 import '../config/app_config.dart';
 import '../services/license_service.dart';
@@ -1189,6 +1190,15 @@ class _ScannerPosScreenState extends State<ScannerPosScreen> {
                 () {
                   Navigator.pop(ctx);
                   _navigateTo(const HistorialScreen());
+                },
+              ),
+              _buildMenuItem(
+                Icons.point_of_sale_rounded,
+                'Caja',
+                'Abrir turno y cuadrar efectivo',
+                () {
+                  Navigator.pop(ctx);
+                  _navigateTo(const CajaScreen());
                 },
               ),
               _buildMenuItem(
