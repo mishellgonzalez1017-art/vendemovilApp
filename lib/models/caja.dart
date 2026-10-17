@@ -3,61 +3,177 @@ import 'dart:convert';
 /// Redondea a centavos para evitar diferencias raras de decimales.
 double redondear2(double v) => (v * 100).round() / 100;
 
-/// Un turno de caja: se abre con un fondo inicial y se cierra contando el efectivo.
-class Caja {
+/// Periodos del cuadre de caja y cómo se calculan sus fechas.
+class PeriodoCaja {
+  static const dia = 'dia';
+  static const semana = 'semana';
+  static const mes = 'mes';
+  static const todos = [dia, semana, mes];
+
+  static String nombre(String periodo) {
+    if (periodo == semana) return 'Semana';
+    if (periodo == mes) return 'Mes';
+    return 'Día';
+  }
+
+  /// Rango completo (inicio y fin) del periodo que contiene [ref].
+  /// La semana empieza el lunes.
+  static ({DateTime desde, DateTime hasta}) rango(String periodo, DateTime ref) {
+    if (periodo == semana) {
+      final lunes = DateTime(ref.year, ref.month, ref.day - (ref.weekday - 1));
+      return (
+        desde: lunes,
+        hasta: DateTime(lunes.year, lunes.month, lunes.day + 6, 23, 59, 59, 999),
+      );
+    }
+    if (periodo == mes) {
+      return (
+        desde: DateTime(ref.year, ref.month, 1),
+        hasta: DateTime(ref.year, ref.month + 1, 0, 23, 59, 59, 999),
+      );
+    }
+    return (
+      desde: DateTime(ref.year, ref.month, ref.day),
+      hasta: DateTime(ref.year, ref.month, ref.day, 23, 59, 59, 999),
+    );
+  }
+
+  /// Mueve la fecha de referencia [pasos] periodos (negativo = hacia atrás).
+  static DateTime mover(String periodo, DateTime ref, int pasos) {
+    if (periodo == semana) {
+      return DateTime(ref.year, ref.month, ref.day + 7 * pasos);
+    }
+    if (periodo == mes) return DateTime(ref.year, ref.month + pasos, 1);
+    return DateTime(ref.year, ref.month, ref.day + pasos);
+  }
+}
+
+/// Números de las ventas de un periodo (se calculan, no se guardan).
+class ResumenCuadre {
+  final Map<String, double> ventasPorMetodo;
+  final Map<String, int> conteoPorMetodo;
+
+  /// Ganancia del periodo; null si los productos no tienen precio de compra.
+  final double? ganancia;
+
+  ResumenCuadre({
+    required this.ventasPorMetodo,
+    required this.conteoPorMetodo,
+    this.ganancia,
+  });
+
+  double get totalVendido =>
+      redondear2(ventasPorMetodo.values.fold(0.0, (s, v) => s + v));
+
+  int get numVentas => conteoPorMetodo.values.fold(0, (s, v) => s + v);
+
+  /// Solo las ventas en efectivo entran al cajón.
+  double get efectivoPeriodo => ventasPorMetodo['efectivo'] ?? 0;
+
+  /// Efectivo que debería haber: fondo inicial + ventas en efectivo.
+  double esperado(double fondoInicial) =>
+      redondear2(fondoInicial + efectivoPeriodo);
+
+  /// Positivo = sobra, negativo = falta.
+  double diferencia(double fondoInicial, double contado) =>
+      redondear2(contado - esperado(fondoInicial));
+
+  Map<String, Map<String, num>> get detalleMetodos => {
+        for (final k in ventasPorMetodo.keys)
+          k: {'n': conteoPorMetodo[k] ?? 0, 'total': ventasPorMetodo[k] ?? 0},
+      };
+}
+
+/// Un cuadre. Cuando está guardado es un "cierre". Mientras se está llenando
+/// en pantalla puede tener [efectivoContado] y [diferencia] en null.
+class CierreCaja {
   final String id;
-  final DateTime fechaApertura;
+  final String periodo;
+  final DateTime desde;
+  final DateTime hasta;
+  final DateTime fechaCierre;
   final double fondoInicial;
-
-  // Datos del cierre (null mientras la caja está abierta).
-  final DateTime? fechaCierre;
+  final double efectivoPeriodo;
+  final double efectivoEsperado;
   final double? efectivoContado;
-  final double? efectivoEsperado;
   final double? diferencia;
-  final double? totalVentas;
-  final int? numVentas;
-  final double? totalIngresos;
-  final double? totalGastos;
-
-  /// Ventas por método de pago al momento del cierre: {metodo: {'n': cantidad, 'total': monto}}
+  final double totalVendido;
+  final int numVentas;
+  final double? ganancia;
   final Map<String, Map<String, num>> detalleMetodos;
   final String? nota;
 
-  Caja({
+  CierreCaja({
     required this.id,
-    required this.fechaApertura,
+    required this.periodo,
+    required this.desde,
+    required this.hasta,
+    required this.fechaCierre,
     required this.fondoInicial,
-    this.fechaCierre,
+    required this.efectivoPeriodo,
+    required this.efectivoEsperado,
     this.efectivoContado,
-    this.efectivoEsperado,
     this.diferencia,
-    this.totalVentas,
-    this.numVentas,
-    this.totalIngresos,
-    this.totalGastos,
+    required this.totalVendido,
+    required this.numVentas,
+    this.ganancia,
     this.detalleMetodos = const {},
     this.nota,
   });
 
-  bool get abierta => fechaCierre == null;
+  /// Arma el cuadre a partir de un resumen y lo que escribió el usuario.
+  factory CierreCaja.desdeResumen({
+    required String id,
+    required String periodo,
+    required DateTime desde,
+    required DateTime hasta,
+    required ResumenCuadre resumen,
+    required double fondoInicial,
+    double? efectivoContado,
+    String? nota,
+  }) {
+    final fondo = redondear2(fondoInicial);
+    final contado =
+        efectivoContado == null ? null : redondear2(efectivoContado);
+    return CierreCaja(
+      id: id,
+      periodo: periodo,
+      desde: desde,
+      hasta: hasta,
+      fechaCierre: DateTime.now(),
+      fondoInicial: fondo,
+      efectivoPeriodo: resumen.efectivoPeriodo,
+      efectivoEsperado: resumen.esperado(fondo),
+      efectivoContado: contado,
+      diferencia: contado == null ? null : resumen.diferencia(fondo, contado),
+      totalVendido: resumen.totalVendido,
+      numVentas: resumen.numVentas,
+      ganancia: resumen.ganancia,
+      detalleMetodos: resumen.detalleMetodos,
+      nota: (nota == null || nota.trim().isEmpty) ? null : nota.trim(),
+    );
+  }
 
   Map<String, dynamic> toMap() => {
         'id': id,
-        'fecha_apertura': fechaApertura.toIso8601String(),
+        'periodo': periodo,
+        'desde': desde.toIso8601String(),
+        'hasta': hasta.toIso8601String(),
+        'fecha_cierre': fechaCierre.toIso8601String(),
         'fondo_inicial': fondoInicial,
-        'fecha_cierre': fechaCierre?.toIso8601String(),
-        'efectivo_contado': efectivoContado,
+        'efectivo_periodo': efectivoPeriodo,
         'efectivo_esperado': efectivoEsperado,
+        'efectivo_contado': efectivoContado,
         'diferencia': diferencia,
-        'total_ventas': totalVentas,
+        'total_vendido': totalVendido,
         'num_ventas': numVentas,
-        'total_ingresos': totalIngresos,
-        'total_gastos': totalGastos,
-        'detalle_metodos': detalleMetodos.isEmpty ? null : jsonEncode(detalleMetodos),
+        'ganancia': ganancia,
+        'detalle_metodos':
+            detalleMetodos.isEmpty ? null : jsonEncode(detalleMetodos),
         'nota': nota,
       };
 
-  factory Caja.fromMap(Map<String, dynamic> m) {
+  factory CierreCaja.fromMap(Map<String, dynamic> m) {
     final Map<String, Map<String, num>> detalle = {};
     final raw = m['detalle_metodos'] as String?;
     if (raw != null && raw.isNotEmpty) {
@@ -70,99 +186,22 @@ class Caja {
         };
       });
     }
-    return Caja(
+    return CierreCaja(
       id: m['id'] as String,
-      fechaApertura: DateTime.parse(m['fecha_apertura'] as String),
+      periodo: m['periodo'] as String,
+      desde: DateTime.parse(m['desde'] as String),
+      hasta: DateTime.parse(m['hasta'] as String),
+      fechaCierre: DateTime.parse(m['fecha_cierre'] as String),
       fondoInicial: (m['fondo_inicial'] as num).toDouble(),
-      fechaCierre: m['fecha_cierre'] == null
-          ? null
-          : DateTime.parse(m['fecha_cierre'] as String),
+      efectivoPeriodo: (m['efectivo_periodo'] as num).toDouble(),
+      efectivoEsperado: (m['efectivo_esperado'] as num).toDouble(),
       efectivoContado: (m['efectivo_contado'] as num?)?.toDouble(),
-      efectivoEsperado: (m['efectivo_esperado'] as num?)?.toDouble(),
       diferencia: (m['diferencia'] as num?)?.toDouble(),
-      totalVentas: (m['total_ventas'] as num?)?.toDouble(),
-      numVentas: (m['num_ventas'] as num?)?.toInt(),
-      totalIngresos: (m['total_ingresos'] as num?)?.toDouble(),
-      totalGastos: (m['total_gastos'] as num?)?.toDouble(),
+      totalVendido: (m['total_vendido'] as num).toDouble(),
+      numVentas: (m['num_ventas'] as num).toInt(),
+      ganancia: (m['ganancia'] as num?)?.toDouble(),
       detalleMetodos: detalle,
       nota: m['nota'] as String?,
     );
   }
-}
-
-/// Entrada o salida de efectivo de la gaveta que no es una venta
-/// (ej. pago a proveedor, retiro, o dinero que se agrega).
-class MovimientoCaja {
-  static const ingreso = 'ingreso';
-  static const gasto = 'gasto';
-
-  final String id;
-  final String cajaId;
-  final String tipo; // 'ingreso' | 'gasto'
-  final double monto;
-  final String concepto;
-  final DateTime fecha;
-
-  MovimientoCaja({
-    required this.id,
-    required this.cajaId,
-    required this.tipo,
-    required this.monto,
-    required this.concepto,
-    DateTime? fecha,
-  }) : fecha = fecha ?? DateTime.now();
-
-  bool get esGasto => tipo == gasto;
-
-  Map<String, dynamic> toMap() => {
-        'id': id,
-        'caja_id': cajaId,
-        'tipo': tipo,
-        'monto': monto,
-        'concepto': concepto,
-        'fecha': fecha.toIso8601String(),
-      };
-
-  factory MovimientoCaja.fromMap(Map<String, dynamic> m) => MovimientoCaja(
-        id: m['id'] as String,
-        cajaId: m['caja_id'] as String,
-        tipo: m['tipo'] as String,
-        monto: (m['monto'] as num).toDouble(),
-        concepto: m['concepto'] as String? ?? '',
-        fecha: DateTime.parse(m['fecha'] as String),
-      );
-}
-
-/// Números calculados de una caja abierta (en vivo).
-class ResumenCaja {
-  final double fondoInicial;
-  final Map<String, double> ventasPorMetodo;
-  final Map<String, int> conteoPorMetodo;
-  final double ingresos;
-  final double gastos;
-
-  ResumenCaja({
-    required this.fondoInicial,
-    required this.ventasPorMetodo,
-    required this.conteoPorMetodo,
-    required this.ingresos,
-    required this.gastos,
-  });
-
-  double get totalVentas =>
-      ventasPorMetodo.values.fold(0.0, (s, v) => s + v);
-
-  int get numVentas => conteoPorMetodo.values.fold(0, (s, v) => s + v);
-
-  double get ventasEfectivo => ventasPorMetodo['efectivo'] ?? 0;
-
-  /// Efectivo que debería haber en la gaveta:
-  /// fondo + ventas en efectivo + ingresos - gastos.
-  double get efectivoEsperado =>
-      redondear2(fondoInicial + ventasEfectivo + ingresos - gastos);
-
-  Map<String, Map<String, num>> get detalleMetodos => {
-        for (final k in ventasPorMetodo.keys)
-          k: {'n': conteoPorMetodo[k] ?? 0, 'total': ventasPorMetodo[k] ?? 0},
-      };
 }

@@ -4,6 +4,7 @@ import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/venta.dart';
+import '../models/caja.dart';
 import '../utils/currency_formatter.dart';
 import '../utils/peso_formatter.dart';
 import '../config/app_config.dart';
@@ -235,6 +236,114 @@ class PrinterService {
     bytes += _bytesCentrado(_mensajePie);
     bytes += _bytesCentrado('${AppConfig.nombreSinAcentos} v${AppConfig.version}');
 
+    bytes += generator.feed(2);
+    bytes += generator.cut();
+
+    await PrintBluetoothThermal.writeBytes(bytes);
+  }
+
+  // ============ CUADRE DE CAJA ============
+
+  static const _ordenMetodos = ['efectivo', 'yape', 'plin', 'tarjeta'];
+
+  List<String> _lineasCuadre(CierreCaja c) {
+    final f = DateFormat('dd/MM/yyyy', 'es');
+    final lines = <String>[];
+    lines.add(_hr());
+    lines.add('CUADRE DE CAJA');
+    lines.add(_lr('Periodo:', PeriodoCaja.nombre(c.periodo)));
+    lines.add(_lr('Desde:', f.format(c.desde)));
+    lines.add(_lr('Hasta:', f.format(c.hasta)));
+    lines.add(_hr());
+    lines.add(_lr('Ventas:', '${c.numVentas}'));
+    lines.add(_lr('Vendido:', _formatMoney(c.totalVendido)));
+    lines.add(_lr(
+      'Ganancia:',
+      c.ganancia == null ? '-' : _formatMoney(c.ganancia!),
+    ));
+    lines.add(_hr());
+    lines.add('INGRESOS POR METODO');
+    final claves = c.detalleMetodos.keys.toList()
+      ..sort((a, b) {
+        int pos(String k) {
+          final i = _ordenMetodos.indexOf(k);
+          return i < 0 ? 99 : i;
+        }
+
+        return pos(a).compareTo(pos(b));
+      });
+    for (final k in claves) {
+      final d = c.detalleMetodos[k]!;
+      lines.add(_lr(
+        '${_metodoPagoLabel(k)} (${d['n'] ?? 0})',
+        _formatMoney((d['total'] ?? 0).toDouble()),
+      ));
+    }
+    lines.add(_hr());
+    lines.add('EFECTIVO EN CAJA');
+    lines.add(_lr('Fondo inicial:', _formatMoney(c.fondoInicial)));
+    lines.add(_lr('+ Efectivo periodo:', _formatMoney(c.efectivoPeriodo)));
+    lines.add(_lr('Esperado:', _formatMoney(c.efectivoEsperado)));
+    if (c.efectivoContado != null) {
+      lines.add(_lr('Contado:', _formatMoney(c.efectivoContado!)));
+      final dif = c.diferencia ?? 0;
+      if (dif.abs() < 0.005) {
+        lines.add(_lr('Resultado:', 'Cuadra'));
+      } else if (dif > 0) {
+        lines.add(_lr('Sobrante:', _formatMoney(dif)));
+      } else {
+        lines.add(_lr('Faltante:', _formatMoney(-dif)));
+      }
+    }
+    if (c.nota != null) lines.add('Nota: ${c.nota}');
+    lines.add(_hr());
+    return lines;
+  }
+
+  /// Texto plano del cuadre para compartir por WhatsApp.
+  Future<String> textoCuadre(CierreCaja c) async {
+    await cargarDesdePrefs();
+    final buf = StringBuffer();
+    buf.writeln('*${_nombreNegocio.toUpperCase()}*');
+    for (final line in _lineasCuadre(c)) {
+      buf.writeln(line);
+    }
+    buf.writeln('${AppConfig.nombreSinAcentos} v${AppConfig.version}');
+    return buf.toString().trim();
+  }
+
+  Future<void> imprimirCuadre(CierreCaja c, {String? macOverride}) async {
+    await cargarDesdePrefs();
+    final mac = macOverride ?? _impresoraMac;
+    if (mac == null || mac.isEmpty) {
+      throw Exception('No hay impresora configurada');
+    }
+
+    final conectado = await PrintBluetoothThermal.connectionStatus;
+    if (!conectado) {
+      final res = await PrintBluetoothThermal.connect(macPrinterAddress: mac);
+      if (!res) throw Exception('No se pudo conectar a la impresora');
+    }
+
+    final profile = await CapabilityProfile.load();
+    final generator = Generator(
+      _anchoPapel == 80.0 ? PaperSize.mm80 : PaperSize.mm58,
+      profile,
+    );
+    List<int> bytes = [];
+    bytes += generator.reset();
+    bytes += generator.setGlobalFont(PosFontType.fontA);
+    bytes += _bytesCentrado(
+      _nombreNegocio.toUpperCase(),
+      grande: true,
+      negrita: true,
+    );
+
+    const izquierda = PosStyles(align: PosAlign.left);
+    for (final line in _lineasCuadre(c)) {
+      bytes += generator.text(_stripAccents(line), styles: izquierda);
+    }
+    bytes += _bytesCentrado('${AppConfig.nombreSinAcentos} v${AppConfig.version}');
     bytes += generator.feed(2);
     bytes += generator.cut();
 

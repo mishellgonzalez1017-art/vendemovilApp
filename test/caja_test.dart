@@ -2,30 +2,38 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:vendemas/models/caja.dart';
 
 void main() {
-  group('ResumenCaja', () {
-    test('efectivo esperado = fondo + ventas en efectivo + ingresos - gastos', () {
-      final r = ResumenCaja(
-        fondoInicial: 200,
-        ventasPorMetodo: {'efectivo': 150.50, 'tarjeta': 80, 'yape': 20},
-        conteoPorMetodo: {'efectivo': 6, 'tarjeta': 2, 'yape': 1},
-        ingresos: 10,
-        gastos: 35.25,
-      );
-      // Solo las ventas en efectivo entran a la gaveta.
-      expect(r.efectivoEsperado, 325.25);
-      expect(r.totalVentas, 250.50);
-      expect(r.numVentas, 9);
+  group('ResumenCuadre', () {
+    final resumen = ResumenCuadre(
+      ventasPorMetodo: {'efectivo': 150.50, 'tarjeta': 80, 'yape': 20},
+      conteoPorMetodo: {'efectivo': 6, 'tarjeta': 2, 'yape': 1},
+      ganancia: 60,
+    );
+
+    test('totales del periodo', () {
+      expect(resumen.totalVendido, 250.50);
+      expect(resumen.numVentas, 9);
+      // Solo las ventas en efectivo entran al cajón.
+      expect(resumen.efectivoPeriodo, 150.50);
+    });
+
+    test('esperado = fondo inicial + efectivo del periodo', () {
+      expect(resumen.esperado(200), 350.50);
+      expect(resumen.esperado(0), 150.50);
+    });
+
+    test('diferencia: positiva sobra, negativa falta, cero cuadra', () {
+      expect(resumen.diferencia(200, 340.50), -10); // faltan 10
+      expect(resumen.diferencia(200, 360.50), 10); // sobran 10
+      expect(resumen.diferencia(200, 350.50), 0); // cuadra
     });
 
     test('sin ventas en efectivo solo cuenta el fondo', () {
-      final r = ResumenCaja(
-        fondoInicial: 100,
+      final r = ResumenCuadre(
         ventasPorMetodo: {'tarjeta': 500},
         conteoPorMetodo: {'tarjeta': 3},
-        ingresos: 0,
-        gastos: 0,
       );
-      expect(r.efectivoEsperado, 100);
+      expect(r.esperado(100), 100);
+      expect(r.ganancia, isNull);
     });
 
     test('redondear2 evita errores de decimales', () {
@@ -34,41 +42,100 @@ void main() {
     });
   });
 
-  group('Caja', () {
-    test('toMap / fromMap conserva el detalle por método', () {
-      final c = Caja(
-        id: 'abc',
-        fechaApertura: DateTime(2026, 10, 15, 8, 0),
-        fondoInicial: 200,
-        fechaCierre: DateTime(2026, 10, 15, 18, 30),
-        efectivoContado: 340,
-        efectivoEsperado: 325.25,
-        diferencia: 14.75,
-        totalVentas: 250.5,
-        numVentas: 9,
-        totalIngresos: 10,
-        totalGastos: 35.25,
-        detalleMetodos: {
-          'efectivo': {'n': 6, 'total': 150.5},
-        },
-        nota: 'Turno de la tarde',
-      );
-      final copia = Caja.fromMap(c.toMap());
-      expect(copia.abierta, false);
-      expect(copia.diferencia, 14.75);
-      expect(copia.detalleMetodos['efectivo']!['n'], 6);
-      expect(copia.detalleMetodos['efectivo']!['total'], 150.5);
-      expect(copia.nota, 'Turno de la tarde');
+  group('PeriodoCaja', () {
+    // 2026-10-15 es jueves.
+    final jueves = DateTime(2026, 10, 15, 13, 30);
+
+    test('día', () {
+      final r = PeriodoCaja.rango(PeriodoCaja.dia, jueves);
+      expect(r.desde, DateTime(2026, 10, 15));
+      expect(r.hasta, DateTime(2026, 10, 15, 23, 59, 59, 999));
     });
 
-    test('una caja sin fecha de cierre está abierta', () {
-      final c = Caja(
-        id: 'x',
-        fechaApertura: DateTime(2026, 10, 15),
-        fondoInicial: 0,
+    test('semana empieza el lunes y termina el domingo', () {
+      final r = PeriodoCaja.rango(PeriodoCaja.semana, jueves);
+      expect(r.desde, DateTime(2026, 10, 12));
+      expect(r.hasta, DateTime(2026, 10, 18, 23, 59, 59, 999));
+    });
+
+    test('mes cubre del 1 al último día', () {
+      final r = PeriodoCaja.rango(PeriodoCaja.mes, jueves);
+      expect(r.desde, DateTime(2026, 10, 1));
+      expect(r.hasta, DateTime(2026, 10, 31, 23, 59, 59, 999));
+      final feb = PeriodoCaja.rango(PeriodoCaja.mes, DateTime(2028, 2, 10));
+      expect(feb.hasta.day, 29); // año bisiesto
+    });
+
+    test('mover cambia de periodo sin desbordar meses', () {
+      expect(PeriodoCaja.mover(PeriodoCaja.dia, jueves, -1).day, 14);
+      expect(PeriodoCaja.mover(PeriodoCaja.semana, jueves, 1).day, 22);
+      final ene = PeriodoCaja.mover(PeriodoCaja.mes, DateTime(2026, 3, 31), -1);
+      expect(ene.month, 2);
+      final prox = PeriodoCaja.mover(PeriodoCaja.mes, DateTime(2026, 12, 15), 1);
+      expect(prox.year, 2027);
+      expect(prox.month, 1);
+    });
+  });
+
+  group('CierreCaja', () {
+    test('desdeResumen calcula esperado y diferencia', () {
+      final resumen = ResumenCuadre(
+        ventasPorMetodo: {'efectivo': 100},
+        conteoPorMetodo: {'efectivo': 4},
       );
-      expect(c.abierta, true);
-      expect(Caja.fromMap(c.toMap()).abierta, true);
+      final c = CierreCaja.desdeResumen(
+        id: 'x',
+        periodo: PeriodoCaja.dia,
+        desde: DateTime(2026, 10, 15),
+        hasta: DateTime(2026, 10, 15, 23, 59, 59),
+        resumen: resumen,
+        fondoInicial: 50,
+        efectivoContado: 140,
+        nota: '  turno de la tarde ',
+      );
+      expect(c.efectivoEsperado, 150);
+      expect(c.diferencia, -10);
+      expect(c.nota, 'turno de la tarde');
+    });
+
+    test('sin efectivo contado no hay diferencia (no se muestra falta)', () {
+      final c = CierreCaja.desdeResumen(
+        id: '',
+        periodo: PeriodoCaja.dia,
+        desde: DateTime(2026, 10, 15),
+        hasta: DateTime(2026, 10, 15, 23, 59, 59),
+        resumen: ResumenCuadre(ventasPorMetodo: {}, conteoPorMetodo: {}),
+        fondoInicial: 50,
+      );
+      expect(c.efectivoContado, isNull);
+      expect(c.diferencia, isNull);
+    });
+
+    test('toMap / fromMap conserva todo', () {
+      final c = CierreCaja.desdeResumen(
+        id: 'abc',
+        periodo: PeriodoCaja.semana,
+        desde: DateTime(2026, 10, 12),
+        hasta: DateTime(2026, 10, 18, 23, 59, 59, 999),
+        resumen: ResumenCuadre(
+          ventasPorMetodo: {'efectivo': 150.5, 'tarjeta': 80},
+          conteoPorMetodo: {'efectivo': 6, 'tarjeta': 2},
+          ganancia: 55.25,
+        ),
+        fondoInicial: 200,
+        efectivoContado: 340,
+        nota: 'ok',
+      );
+      final copia = CierreCaja.fromMap(c.toMap());
+      expect(copia.periodo, PeriodoCaja.semana);
+      expect(copia.desde, c.desde);
+      expect(copia.efectivoEsperado, 350.5);
+      expect(copia.diferencia, -10.5);
+      expect(copia.ganancia, 55.25);
+      expect(copia.numVentas, 8);
+      expect(copia.detalleMetodos['efectivo']!['n'], 6);
+      expect(copia.detalleMetodos['tarjeta']!['total'], 80);
+      expect(copia.nota, 'ok');
     });
   });
 }

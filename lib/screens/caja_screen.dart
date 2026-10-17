@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../config/app_config.dart';
+import 'package:uuid/uuid.dart';
 import '../models/caja.dart';
 import '../services/database_service.dart';
+import '../services/printer_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/currency_formatter.dart';
 import '../utils/metodos_pago_config.dart';
 import '../utils/safe_area_padding.dart';
 import '../utils/whatsapp_share.dart';
-import '../widgets/safe_bottom_bar.dart';
 
 /// Convierte lo que escribe el usuario ("12.50" o "12,50") en número.
 double? parseMonto(String texto) {
@@ -19,7 +19,24 @@ double? parseMonto(String texto) {
   return v;
 }
 
-final _fechaFmt = DateFormat('dd/MM/yyyy HH:mm', 'es');
+const _naranja = Color(0xFFEF6C00);
+
+/// Texto corto del periodo: "Hoy", "12 oct - 18 oct 2026" o "Octubre 2026".
+String etiquetaPeriodo(String periodo, DateTime desde, DateTime hasta) {
+  if (periodo == PeriodoCaja.semana) {
+    final a = DateFormat('d MMM', 'es').format(desde);
+    final b = DateFormat('d MMM yyyy', 'es').format(hasta);
+    return '$a - $b';
+  }
+  if (periodo == PeriodoCaja.mes) {
+    final t = DateFormat('MMMM yyyy', 'es').format(desde);
+    return t[0].toUpperCase() + t.substring(1);
+  }
+  final hoy = DateTime.now();
+  final esHoy =
+      desde.year == hoy.year && desde.month == hoy.month && desde.day == hoy.day;
+  return esHoy ? 'Hoy' : DateFormat('dd/MM/yyyy', 'es').format(desde);
+}
 
 List<String> _ordenarMetodos(Iterable<String> claves) {
   final lista = claves.toList();
@@ -33,7 +50,7 @@ List<String> _ordenarMetodos(Iterable<String> claves) {
 }
 
 // ============================================================
-// PANTALLA PRINCIPAL DE CAJA
+// PANTALLA PRINCIPAL: CUADRE DE CAJA
 // ============================================================
 class CajaScreen extends StatefulWidget {
   const CajaScreen({super.key});
@@ -45,13 +62,16 @@ class CajaScreen extends StatefulWidget {
 class _CajaScreenState extends State<CajaScreen> {
   final _db = DatabaseService.instance;
   final _fondoCtrl = TextEditingController();
+  final _contadoCtrl = TextEditingController();
+  final _notaCtrl = TextEditingController();
 
-  bool _loading = true;
+  String _periodo = PeriodoCaja.dia;
+  DateTime _ref = DateTime.now();
   String _simbolo = 'Q';
-  Caja? _caja;
-  ResumenCaja? _resumen;
-  List<MovimientoCaja> _movs = [];
-  List<Caja> _cierres = [];
+  bool _loading = true;
+  int _cargaId = 0;
+  ResumenCuadre? _resumen;
+  List<CierreCaja> _cierres = [];
 
   @override
   void initState() {
@@ -62,31 +82,74 @@ class _CajaScreenState extends State<CajaScreen> {
   @override
   void dispose() {
     _fondoCtrl.dispose();
+    _contadoCtrl.dispose();
+    _notaCtrl.dispose();
     super.dispose();
   }
+
+  ({DateTime desde, DateTime hasta}) get _rango =>
+      PeriodoCaja.rango(_periodo, _ref);
+
+  double get _fondo => parseMonto(_fondoCtrl.text) ?? 0;
+  double? get _contado => parseMonto(_contadoCtrl.text);
 
   String _q(double v) => CurrencyFormatter.format(v, _simbolo);
 
   Future<void> _cargar() async {
+    final id = ++_cargaId;
     final prefs = await SharedPreferences.getInstance();
     final simbolo = prefs.getString('moneda_simbolo') ?? 'Q';
-    final caja = await _db.obtenerCajaAbierta();
-    ResumenCaja? resumen;
-    var movs = <MovimientoCaja>[];
-    if (caja != null) {
-      resumen = await _db.calcularResumenCaja(caja);
-      movs = await _db.obtenerMovimientosCaja(caja.id);
-    }
-    final cierres = await _db.obtenerCajasCerradas();
-    if (!mounted) return;
+    final r = _rango;
+    final resumen = await _db.resumenCuadre(r.desde, r.hasta);
+    final cierres = await _db.obtenerCierres();
+    // Si el usuario cambió de periodo mientras cargaba, se descarta este resultado.
+    if (!mounted || id != _cargaId) return;
     setState(() {
       _simbolo = simbolo;
-      _caja = caja;
       _resumen = resumen;
-      _movs = movs;
       _cierres = cierres;
       _loading = false;
     });
+  }
+
+  void _limpiarCampos() {
+    _fondoCtrl.clear();
+    _contadoCtrl.clear();
+    _notaCtrl.clear();
+  }
+
+  void _cambiarPeriodo(String p) {
+    if (p == _periodo) return;
+    setState(() {
+      _periodo = p;
+      _limpiarCampos();
+    });
+    _cargar();
+  }
+
+  void _mover(int pasos) {
+    setState(() {
+      _ref = PeriodoCaja.mover(_periodo, _ref, pasos);
+      _limpiarCampos();
+    });
+    _cargar();
+  }
+
+  Future<void> _elegirFecha() async {
+    final ahora = DateTime.now();
+    final f = await showDatePicker(
+      context: context,
+      initialDate: _ref.isAfter(ahora) ? ahora : _ref,
+      firstDate: DateTime(2020),
+      lastDate: ahora,
+      helpText: 'Elige una fecha',
+    );
+    if (f == null || !mounted) return;
+    setState(() {
+      _ref = f;
+      _limpiarCampos();
+    });
+    _cargar();
   }
 
   void _aviso(String texto, {bool error = false}) {
@@ -98,46 +161,371 @@ class _CajaScreenState extends State<CajaScreen> {
     );
   }
 
-  Future<void> _abrirCaja() async {
-    final texto = _fondoCtrl.text.trim();
-    final fondo = texto.isEmpty ? 0.0 : parseMonto(texto);
-    if (fondo == null || fondo < 0) {
-      _aviso('Escribe un monto válido', error: true);
+  /// El cuadre tal como se ve ahora en pantalla (para imprimir o compartir).
+  CierreCaja? _borrador({String id = ''}) {
+    final r = _resumen;
+    if (r == null) return null;
+    final rango = _rango;
+    return CierreCaja.desdeResumen(
+      id: id,
+      periodo: _periodo,
+      desde: rango.desde,
+      hasta: rango.hasta,
+      resumen: r,
+      fondoInicial: _fondo,
+      efectivoContado: _contado,
+      nota: _notaCtrl.text,
+    );
+  }
+
+  Future<void> _imprimir() async {
+    final c = _borrador();
+    if (c == null) return;
+    try {
+      await PrinterService.instance.imprimirCuadre(c);
+      HapticFeedback.heavyImpact();
+    } catch (e) {
+      if (!mounted) return;
+      _aviso('No se pudo imprimir: $e', error: true);
+    }
+  }
+
+  Future<void> _compartir() async {
+    final c = _borrador();
+    if (c == null) return;
+    final texto = await PrinterService.instance.textoCuadre(c);
+    final ok = await WhatsAppShare.enviar(texto: texto);
+    if (!ok && mounted) _aviso('No se pudo compartir', error: true);
+  }
+
+  Future<void> _guardarCierre() async {
+    if (_contado == null) {
+      _aviso('Escribe el efectivo contado para guardar el cierre', error: true);
       return;
     }
+    final c = _borrador(id: const Uuid().v4());
+    if (c == null) return;
     FocusScope.of(context).unfocus();
-    await _db.abrirCaja(fondo);
-    _fondoCtrl.clear();
+    await _db.guardarCierre(c);
+    if (!mounted) return;
+    setState(_limpiarCampos);
     await _cargar();
-    if (mounted) _aviso('Caja abierta');
+    if (mounted) _aviso('Cierre guardado');
   }
 
-  Future<void> _agregarMovimiento(String tipo) async {
-    final caja = _caja;
-    if (caja == null) return;
-    final res = await showDialog<_MovimientoInput>(
-      context: context,
-      builder: (_) => _MovimientoDialog(tipo: tipo),
-    );
-    if (res == null) return;
-    await _db.agregarMovimientoCaja(
-      MovimientoCaja(
-        id: DateTime.now().microsecondsSinceEpoch.toString(),
-        cajaId: caja.id,
-        tipo: tipo,
-        monto: redondear2(res.monto),
-        concepto: res.concepto,
+  Future<void> _abrirDetalle(CierreCaja c) async {
+    final cambio = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DetalleCierreScreen(cierre: c, simbolo: _simbolo),
       ),
     );
-    await _cargar();
+    if (cambio == true && mounted) _cargar();
   }
 
-  Future<void> _eliminarMovimiento(MovimientoCaja m) async {
+  // ---------------------------------------------------------------
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Cuadre de caja'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.print_rounded, color: AppTheme.primary),
+            onPressed: _resumen == null ? null : _imprimir,
+            tooltip: 'Imprimir cuadre',
+          ),
+          IconButton(
+            icon: const Icon(Icons.share_rounded, color: AppTheme.primary),
+            onPressed: _resumen == null ? null : _compartir,
+            tooltip: 'Compartir por WhatsApp',
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+          : ListView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: listBottomPadding(context, top: 8, bottomExtra: 24),
+              children: [
+                _selectorPeriodo(),
+                const SizedBox(height: 10),
+                _selectorFecha(),
+                const SizedBox(height: 12),
+                _tarjetaResumen(),
+                ..._ingresosPorMetodo(),
+                ..._efectivoEnCaja(),
+                ..._cierresGuardados(),
+              ],
+            ),
+    );
+  }
+
+  Widget _selectorPeriodo() {
+    return Row(
+      children: [
+        for (var i = 0; i < PeriodoCaja.todos.length; i++) ...[
+          if (i > 0) const SizedBox(width: 10),
+          Expanded(child: _chipPeriodo(PeriodoCaja.todos[i])),
+        ],
+      ],
+    );
+  }
+
+  Widget _chipPeriodo(String p) {
+    final sel = p == _periodo;
+    return GestureDetector(
+      onTap: () => _cambiarPeriodo(p),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: sel ? AppTheme.primary : AppTheme.bgWhite,
+          borderRadius: BorderRadius.circular(12),
+          border: sel ? null : Border.all(color: AppTheme.border),
+        ),
+        child: Center(
+          child: Text(
+            PeriodoCaja.nombre(p),
+            style: TextStyle(
+              color: sel ? Colors.white : AppTheme.textPrimary,
+              fontWeight: sel ? FontWeight.bold : FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _selectorFecha() {
+    final r = _rango;
+    final esUltimo = r.hasta.isAfter(DateTime.now());
+    return Row(
+      children: [
+        IconButton(
+          onPressed: () => _mover(-1),
+          icon: const Icon(Icons.chevron_left_rounded),
+          tooltip: 'Anterior',
+        ),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: _elegirFecha,
+            icon: const Icon(Icons.calendar_month_rounded, size: 20),
+            label: Text(etiquetaPeriodo(_periodo, r.desde, r.hasta)),
+            style: OutlinedButton.styleFrom(
+              backgroundColor: AppTheme.bgWhite,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+          ),
+        ),
+        IconButton(
+          onPressed: esUltimo ? null : () => _mover(1),
+          icon: const Icon(Icons.chevron_right_rounded),
+          tooltip: 'Siguiente',
+        ),
+      ],
+    );
+  }
+
+  Widget _tarjetaResumen() {
+    final r = _resumen!;
+    return _ResumenCard(
+      ventas: r.numVentas,
+      vendido: _q(r.totalVendido),
+      ingresos: _q(r.totalVendido),
+      ganancia: r.ganancia == null ? '—' : _q(r.ganancia!),
+    );
+  }
+
+  List<Widget> _ingresosPorMetodo() {
+    final r = _resumen!;
+    final claves = <String>[
+      ...MetodosPagoConfig.todos,
+      ..._ordenarMetodos(
+        r.ventasPorMetodo.keys.where((k) => !MetodosPagoConfig.todos.contains(k)),
+      ),
+    ];
+    return [
+      const _Titulo('Ingresos por método'),
+      for (final k in claves)
+        _MetodoFila(
+          metodo: k,
+          total: _q(r.ventasPorMetodo[k] ?? 0),
+          conteo: r.conteoPorMetodo[k] ?? 0,
+        ),
+    ];
+  }
+
+  List<Widget> _efectivoEnCaja() {
+    final r = _resumen!;
+    final fondo = _fondo;
+    final esperado = r.esperado(fondo);
+    final contado = _contado;
+    return [
+      const _Titulo('Efectivo en caja'),
+      const Padding(
+        padding: EdgeInsets.only(bottom: 10),
+        child: Text(
+          'Solo cuenta el dinero físico. Transferencia, Tigo Money y tarjeta '
+          'no entran al cajón.',
+          style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+        ),
+      ),
+      TextField(
+        controller: _fondoCtrl,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
+        onChanged: (_) => setState(() {}),
+        decoration: InputDecoration(
+          labelText: 'Fondo inicial',
+          helperText: 'Lo que había al abrir (vuelto / cambio)',
+          prefixText: '$_simbolo ',
+        ),
+      ),
+      const SizedBox(height: 12),
+      TextField(
+        controller: _contadoCtrl,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
+        onChanged: (_) => setState(() {}),
+        decoration: InputDecoration(
+          labelText: 'Efectivo contado',
+          helperText: 'Lo que hay en el cajón al cerrar',
+          prefixText: '$_simbolo ',
+        ),
+      ),
+      const SizedBox(height: 12),
+      _Bloque(
+        child: Column(
+          children: [
+            _FilaMonto('Fondo inicial', _q(fondo)),
+            _FilaMonto('+ Efectivo del período', _q(r.efectivoPeriodo)),
+            const Divider(height: 20),
+            _FilaMonto('= Efectivo esperado', _q(esperado), bold: true),
+          ],
+        ),
+      ),
+      // La diferencia solo aparece después de escribir el efectivo contado.
+      if (contado != null) ...[
+        const SizedBox(height: 10),
+        _BannerDiferencia(
+          diferencia: r.diferencia(fondo, contado),
+          simbolo: _simbolo,
+        ),
+      ],
+      const SizedBox(height: 12),
+      TextField(
+        controller: _notaCtrl,
+        textCapitalization: TextCapitalization.sentences,
+        decoration: const InputDecoration(labelText: 'Nota (opcional)'),
+      ),
+      const SizedBox(height: 14),
+      SizedBox(
+        width: double.infinity,
+        child: ElevatedButton.icon(
+          onPressed: contado == null ? null : _guardarCierre,
+          icon: const Icon(Icons.save_rounded),
+          label: const Text('Guardar cierre'),
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> _cierresGuardados() {
+    return [
+      const _Titulo('Cierres guardados'),
+      if (_cierres.isEmpty)
+        const _Bloque(
+          child: Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'Aún no hay cierres guardados',
+                style: TextStyle(color: AppTheme.textSecondary),
+              ),
+            ),
+          ),
+        ),
+      for (final c in _cierres)
+        Container(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          decoration: BoxDecoration(
+            color: AppTheme.bgWhite,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppTheme.border),
+          ),
+          child: ListTile(
+            onTap: () => _abrirDetalle(c),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            title: Text(
+              '${PeriodoCaja.nombre(c.periodo)} · '
+              '${etiquetaPeriodo(c.periodo, c.desde, c.hasta)}',
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+            ),
+            subtitle: Text(
+              'Esperado ${_q(c.efectivoEsperado)} · '
+              'Contado ${_q(c.efectivoContado ?? 0)}',
+              style: const TextStyle(fontSize: 12),
+            ),
+            trailing: _EtiquetaDiferencia(
+              diferencia: c.diferencia ?? 0,
+              simbolo: _simbolo,
+            ),
+          ),
+        ),
+    ];
+  }
+}
+
+// ============================================================
+// DETALLE DE UN CIERRE GUARDADO
+// ============================================================
+class DetalleCierreScreen extends StatelessWidget {
+  const DetalleCierreScreen({super.key, required this.cierre, required this.simbolo});
+
+  final CierreCaja cierre;
+  final String simbolo;
+
+  String _q(double v) => CurrencyFormatter.format(v, simbolo);
+
+  Future<void> _imprimir(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await PrinterService.instance.imprimirCuadre(cierre);
+      HapticFeedback.heavyImpact();
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('No se pudo imprimir: $e'),
+          backgroundColor: AppTheme.warning,
+        ),
+      );
+    }
+  }
+
+  Future<void> _compartir(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final texto = await PrinterService.instance.textoCuadre(cierre);
+    final ok = await WhatsAppShare.enviar(texto: texto);
+    if (!ok) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo compartir'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+    }
+  }
+
+  Future<void> _eliminar(BuildContext context) async {
+    final navigator = Navigator.of(context);
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Eliminar movimiento'),
-        content: Text('¿Eliminar "${m.concepto}" por ${_q(m.monto)}?'),
+        title: const Text('Eliminar cierre'),
+        content: const Text(
+          '¿Eliminar este cierre guardado? Las ventas no se borran.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -152,505 +540,91 @@ class _CajaScreenState extends State<CajaScreen> {
       ),
     );
     if (ok != true) return;
-    await _db.eliminarMovimientoCaja(m.id);
-    await _cargar();
+    await DatabaseService.instance.eliminarCierre(cierre.id);
+    navigator.pop(true);
   }
 
-  Future<void> _cerrarCaja() async {
-    final caja = _caja;
-    if (caja == null) return;
-    final resumen = await _db.calcularResumenCaja(caja);
-    if (!mounted) return;
-    final input = await showDialog<_CierreInput>(
-      context: context,
-      builder: (_) => _CierreDialog(
-        esperado: resumen.efectivoEsperado,
-        simbolo: _simbolo,
-      ),
-    );
-    if (input == null) return;
-    final cerrada = await _db.cerrarCaja(caja, input.contado, nota: input.nota);
-    await _cargar();
-    if (!mounted) return;
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => DetalleCajaScreen(caja: cerrada, simbolo: _simbolo),
-      ),
-    );
-  }
-
-  // ---------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
-    final abierta = _caja != null && !_loading;
+    final c = cierre;
+    final claves = <String>[
+      ...MetodosPagoConfig.todos,
+      ..._ordenarMetodos(
+        c.detalleMetodos.keys.where((k) => !MetodosPagoConfig.todos.contains(k)),
+      ),
+    ];
+    final fechaFmt = DateFormat('dd/MM/yyyy HH:mm', 'es');
     return Scaffold(
-      appBar: AppBar(title: const Text('Caja')),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
-          : RefreshIndicator(
-              color: AppTheme.primary,
-              onRefresh: _cargar,
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: listBottomPadding(context, top: 8),
-                children: _caja == null ? _sinCaja() : _conCaja(),
-              ),
-            ),
-      bottomNavigationBar: abierta
-          ? SafeBottomBar(
-              decoration: const BoxDecoration(
-                color: AppTheme.bgWhite,
-                border: Border(top: BorderSide(color: AppTheme.border)),
-              ),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _cerrarCaja,
-                  icon: const Icon(Icons.lock_outline_rounded),
-                  label: const Text('Cerrar caja'),
-                ),
-              ),
-            )
-          : null,
-    );
-  }
-
-  List<Widget> _sinCaja() {
-    return [
-      _tarjeta(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: AppTheme.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.point_of_sale_rounded,
-                    color: AppTheme.primary,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Text(
-                    'Abrir caja',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              '¿Con cuánto efectivo empiezas el turno? Por ejemplo, el cambio '
-              'que dejas en la gaveta. Al cerrar, la app te dirá cuánto debería '
-              'haber y si sobra o falta dinero.',
-              style: TextStyle(color: AppTheme.textSecondary, height: 1.35),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _fondoCtrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-              ],
-              decoration: InputDecoration(
-                labelText: 'Fondo inicial',
-                prefixText: '$_simbolo ',
-                hintText: '0.00',
-              ),
-              onSubmitted: (_) => _abrirCaja(),
-            ),
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _abrirCaja,
-                icon: const Icon(Icons.lock_open_rounded),
-                label: const Text('Abrir caja'),
-              ),
-            ),
-          ],
-        ),
-      ),
-      ..._seccionCierres(),
-    ];
-  }
-
-  List<Widget> _conCaja() {
-    final caja = _caja!;
-    final r = _resumen!;
-    return [
-      // Encabezado: efectivo esperado
-      Container(
-        margin: const EdgeInsets.symmetric(vertical: 6),
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          gradient: AppTheme.primaryGradient,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          children: [
-            const Text(
-              'Efectivo que debería haber',
-              style: TextStyle(color: Colors.white70, fontSize: 13),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              _q(r.efectivoEsperado),
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Caja abierta el ${_fechaFmt.format(caja.fechaApertura)}',
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
-            ),
-          ],
-        ),
-      ),
-      _tarjeta(
-        child: Column(
-          children: [
-            _FilaMonto('Fondo inicial', _q(r.fondoInicial)),
-            _FilaMonto('+ Ventas en efectivo', _q(r.ventasEfectivo)),
-            _FilaMonto('+ Ingresos', _q(r.ingresos)),
-            _FilaMonto('− Gastos', _q(r.gastos), color: AppTheme.error),
-            const Divider(height: 20),
-            _FilaMonto(
-              'Efectivo esperado',
-              _q(r.efectivoEsperado),
-              bold: true,
-            ),
-          ],
-        ),
-      ),
-      _tarjeta(
-        child: _MetodosResumen(
-          totales: r.ventasPorMetodo,
-          conteos: r.conteoPorMetodo,
-          simbolo: _simbolo,
-        ),
-      ),
-      _tarjeta(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Movimientos de efectivo',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'Anota aquí el dinero que entra o sale de la gaveta y no es una '
-              'venta (pago a un proveedor, retiro, cambio que agregas).',
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _agregarMovimiento(MovimientoCaja.ingreso),
-                    icon: const Icon(Icons.add_rounded, size: 18),
-                    label: const Text('Ingreso'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _agregarMovimiento(MovimientoCaja.gasto),
-                    icon: const Icon(Icons.remove_rounded, size: 18),
-                    label: const Text('Gasto'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppTheme.error,
-                      side: const BorderSide(color: AppTheme.error, width: 1.5),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            if (_movs.isNotEmpty) const SizedBox(height: 8),
-            for (final m in _movs)
-              ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                title: Text(
-                  m.concepto.isEmpty
-                      ? (m.esGasto ? 'Gasto' : 'Ingreso')
-                      : m.concepto,
-                ),
-                subtitle: Text(_fechaFmt.format(m.fecha)),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '${m.esGasto ? '−' : '+'} ${_q(m.monto)}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: m.esGasto ? AppTheme.error : AppTheme.success,
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(
-                        Icons.delete_outline_rounded,
-                        size: 20,
-                        color: AppTheme.textMuted,
-                      ),
-                      onPressed: () => _eliminarMovimiento(m),
-                      tooltip: 'Eliminar',
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ),
-      ..._seccionCierres(),
-    ];
-  }
-
-  List<Widget> _seccionCierres() {
-    if (_cierres.isEmpty) return const [];
-    return [
-      const Padding(
-        padding: EdgeInsets.fromLTRB(4, 18, 4, 6),
-        child: Text(
-          'Cierres anteriores',
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-        ),
-      ),
-      for (final c in _cierres)
-        Container(
-          margin: const EdgeInsets.symmetric(vertical: 4),
-          decoration: BoxDecoration(
-            color: AppTheme.bgWhite,
-            borderRadius: BorderRadius.circular(14),
+      appBar: AppBar(
+        title: const Text('Cierre de caja'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.print_rounded, color: AppTheme.primary),
+            onPressed: () => _imprimir(context),
+            tooltip: 'Imprimir',
           ),
-          child: ListTile(
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => DetalleCajaScreen(caja: c, simbolo: _simbolo),
-              ),
-            ),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            title: Text(
-              _fechaFmt.format(c.fechaCierre!),
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-            ),
-            subtitle: Text(
-              '${c.numVentas ?? 0} ventas · ${_q(c.totalVentas ?? 0)}',
-              style: const TextStyle(fontSize: 12),
-            ),
-            trailing: _EtiquetaDiferencia(
-              diferencia: c.diferencia ?? 0,
-              simbolo: _simbolo,
+          IconButton(
+            icon: const Icon(Icons.share_rounded, color: AppTheme.primary),
+            onPressed: () => _compartir(context),
+            tooltip: 'Compartir por WhatsApp',
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline_rounded, color: AppTheme.error),
+            onPressed: () => _eliminar(context),
+            tooltip: 'Eliminar cierre',
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
+      body: ListView(
+        padding: listBottomPadding(context, top: 8, bottomExtra: 24),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 4, 4, 10),
+            child: Text(
+              '${PeriodoCaja.nombre(c.periodo)} · '
+              '${etiquetaPeriodo(c.periodo, c.desde, c.hasta)}\n'
+              'Guardado el ${fechaFmt.format(c.fechaCierre)}',
+              style: const TextStyle(color: AppTheme.textSecondary, height: 1.4),
             ),
           ),
-        ),
-    ];
-  }
-
-  Widget _tarjeta({required Widget child}) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.bgWhite,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: child,
-    );
-  }
-}
-
-// ============================================================
-// DIÁLOGOS (con sus propios controladores)
-// ============================================================
-class _MovimientoInput {
-  final String concepto;
-  final double monto;
-  _MovimientoInput(this.concepto, this.monto);
-}
-
-class _MovimientoDialog extends StatefulWidget {
-  const _MovimientoDialog({required this.tipo});
-  final String tipo;
-
-  @override
-  State<_MovimientoDialog> createState() => _MovimientoDialogState();
-}
-
-class _MovimientoDialogState extends State<_MovimientoDialog> {
-  final _conceptoCtrl = TextEditingController();
-  final _montoCtrl = TextEditingController();
-  String? _error;
-
-  @override
-  void dispose() {
-    _conceptoCtrl.dispose();
-    _montoCtrl.dispose();
-    super.dispose();
-  }
-
-  void _guardar() {
-    final monto = parseMonto(_montoCtrl.text);
-    if (monto == null || monto <= 0) {
-      setState(() => _error = 'Escribe un monto mayor que cero');
-      return;
-    }
-    Navigator.pop(context, _MovimientoInput(_conceptoCtrl.text.trim(), monto));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final esGasto = widget.tipo == MovimientoCaja.gasto;
-    return AlertDialog(
-      title: Text(esGasto ? 'Registrar gasto' : 'Registrar ingreso'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _montoCtrl,
-              autofocus: true,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+          _ResumenCard(
+            ventas: c.numVentas,
+            vendido: _q(c.totalVendido),
+            ingresos: _q(c.totalVendido),
+            ganancia: c.ganancia == null ? '—' : _q(c.ganancia!),
+          ),
+          const _Titulo('Ingresos por método'),
+          for (final k in claves)
+            _MetodoFila(
+              metodo: k,
+              total: _q((c.detalleMetodos[k]?['total'] ?? 0).toDouble()),
+              conteo: (c.detalleMetodos[k]?['n'] ?? 0).toInt(),
+            ),
+          const _Titulo('Efectivo en caja'),
+          _Bloque(
+            child: Column(
+              children: [
+                _FilaMonto('Fondo inicial', _q(c.fondoInicial)),
+                _FilaMonto('+ Efectivo del período', _q(c.efectivoPeriodo)),
+                const Divider(height: 20),
+                _FilaMonto('= Efectivo esperado', _q(c.efectivoEsperado), bold: true),
+                _FilaMonto(
+                  'Efectivo contado',
+                  _q(c.efectivoContado ?? 0),
+                  bold: true,
+                ),
               ],
-              decoration: InputDecoration(labelText: 'Monto', errorText: _error),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _conceptoCtrl,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: InputDecoration(
-                labelText: 'Concepto',
-                hintText: esGasto ? 'Ej. Pago a proveedor' : 'Ej. Cambio agregado',
-              ),
-            ),
+          ),
+          const SizedBox(height: 10),
+          _BannerDiferencia(diferencia: c.diferencia ?? 0, simbolo: simbolo),
+          if (c.nota != null) ...[
+            const _Titulo('Nota'),
+            _Bloque(child: Text(c.nota!)),
           ],
-        ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar'),
-        ),
-        ElevatedButton(onPressed: _guardar, child: const Text('Guardar')),
-      ],
-    );
-  }
-}
-
-class _CierreInput {
-  final double contado;
-  final String nota;
-  _CierreInput(this.contado, this.nota);
-}
-
-class _CierreDialog extends StatefulWidget {
-  const _CierreDialog({required this.esperado, required this.simbolo});
-  final double esperado;
-  final String simbolo;
-
-  @override
-  State<_CierreDialog> createState() => _CierreDialogState();
-}
-
-class _CierreDialogState extends State<_CierreDialog> {
-  final _contadoCtrl = TextEditingController();
-  final _notaCtrl = TextEditingController();
-  String? _error;
-
-  @override
-  void dispose() {
-    _contadoCtrl.dispose();
-    _notaCtrl.dispose();
-    super.dispose();
-  }
-
-  double? get _contado => parseMonto(_contadoCtrl.text);
-
-  void _cerrar() {
-    final c = _contado;
-    if (c == null || c < 0) {
-      setState(() => _error = 'Escribe cuánto efectivo contaste');
-      return;
-    }
-    Navigator.pop(context, _CierreInput(c, _notaCtrl.text.trim()));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final c = _contado;
-    final dif = c == null ? null : redondear2(c - widget.esperado);
-    return AlertDialog(
-      title: const Text('Cerrar caja'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Debería haber ${CurrencyFormatter.format(widget.esperado, widget.simbolo)}. '
-              'Cuenta el efectivo de la gaveta y escríbelo aquí.',
-              style: const TextStyle(color: AppTheme.textSecondary, height: 1.35),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: _contadoCtrl,
-              autofocus: true,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-              ],
-              onChanged: (_) => setState(() => _error = null),
-              decoration: InputDecoration(
-                labelText: 'Efectivo contado',
-                prefixText: '${widget.simbolo} ',
-                errorText: _error,
-              ),
-            ),
-            if (dif != null) ...[
-              const SizedBox(height: 10),
-              _EtiquetaDiferencia(
-                diferencia: dif,
-                simbolo: widget.simbolo,
-                largo: true,
-              ),
-            ],
-            const SizedBox(height: 12),
-            TextField(
-              controller: _notaCtrl,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                labelText: 'Nota (opcional)',
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar'),
-        ),
-        ElevatedButton(onPressed: _cerrar, child: const Text('Cerrar caja')),
-      ],
     );
   }
 }
@@ -658,19 +632,173 @@ class _CierreDialogState extends State<_CierreDialog> {
 // ============================================================
 // WIDGETS DE APOYO
 // ============================================================
+class _Titulo extends StatelessWidget {
+  const _Titulo(this.texto);
+  final String texto;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 22, 4, 8),
+      child: Text(
+        texto,
+        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+}
+
+class _Bloque extends StatelessWidget {
+  const _Bloque({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.bgWhite,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _ResumenCard extends StatelessWidget {
+  const _ResumenCard({
+    required this.ventas,
+    required this.vendido,
+    required this.ingresos,
+    required this.ganancia,
+  });
+  final int ventas;
+  final String vendido;
+  final String ingresos;
+  final String ganancia;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
+      decoration: BoxDecoration(
+        gradient: AppTheme.primaryGradient,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(child: _Dato('$ventas', 'Ventas')),
+              Expanded(child: _Dato(vendido, 'Vendido')),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(child: _Dato(ingresos, 'Ingresos')),
+              Expanded(child: _Dato(ganancia, 'Ganancia')),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Dato extends StatelessWidget {
+  const _Dato(this.valor, this.etiqueta);
+  final String valor;
+  final String etiqueta;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            valor,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          etiqueta,
+          style: const TextStyle(color: Colors.white70, fontSize: 13),
+        ),
+      ],
+    );
+  }
+}
+
+class _MetodoFila extends StatelessWidget {
+  const _MetodoFila({
+    required this.metodo,
+    required this.total,
+    required this.conteo,
+  });
+  final String metodo;
+  final String total;
+  final int conteo;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = MetodosPagoConfig.colors[metodo] ?? AppTheme.primary;
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppTheme.bgWhite,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            MetodosPagoConfig.icons[metodo] ?? Icons.payments_rounded,
+            color: color,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              conteo > 0
+                  ? '${MetodosPagoConfig.label(metodo)} ($conteo)'
+                  : MetodosPagoConfig.label(metodo),
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+            ),
+          ),
+          Text(
+            total,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.bold,
+              fontSize: 15,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _FilaMonto extends StatelessWidget {
-  const _FilaMonto(this.etiqueta, this.valor, {this.bold = false, this.color});
+  const _FilaMonto(this.etiqueta, this.valor, {this.bold = false});
   final String etiqueta;
   final String valor;
   final bool bold;
-  final Color? color;
 
   @override
   Widget build(BuildContext context) {
     final estilo = TextStyle(
       fontWeight: bold ? FontWeight.bold : FontWeight.w500,
       fontSize: bold ? 15 : 14,
-      color: color,
     );
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -686,331 +814,91 @@ class _FilaMonto extends StatelessWidget {
   }
 }
 
-class _EtiquetaDiferencia extends StatelessWidget {
-  const _EtiquetaDiferencia({
-    required this.diferencia,
-    required this.simbolo,
-    this.largo = false,
-  });
+/// Resultado del cuadre: Faltante (rojo), Sobrante (naranja) o Cuadra (verde).
+({String texto, Color color, IconData icono}) _estadoDiferencia(
+  double diferencia,
+  String simbolo,
+) {
+  if (diferencia.abs() < 0.005) {
+    return (
+      texto: 'Cuadra',
+      color: AppTheme.success,
+      icono: Icons.check_circle_rounded,
+    );
+  }
+  final monto = CurrencyFormatter.format(diferencia.abs(), simbolo);
+  if (diferencia > 0) {
+    return (
+      texto: 'Sobrante $monto',
+      color: _naranja,
+      icono: Icons.arrow_circle_up_rounded,
+    );
+  }
+  return (
+    texto: 'Faltante $monto',
+    color: AppTheme.error,
+    icono: Icons.arrow_circle_down_rounded,
+  );
+}
+
+class _BannerDiferencia extends StatelessWidget {
+  const _BannerDiferencia({required this.diferencia, required this.simbolo});
   final double diferencia;
   final String simbolo;
-  final bool largo;
 
   @override
   Widget build(BuildContext context) {
-    final String texto;
-    final Color color;
-    if (diferencia.abs() < 0.005) {
-      texto = largo ? 'La caja cuadra' : 'Cuadra';
-      color = AppTheme.success;
-    } else if (diferencia > 0) {
-      final m = CurrencyFormatter.format(diferencia, simbolo);
-      texto = largo ? 'Sobran $m' : '+$m';
-      color = AppTheme.warning;
-    } else {
-      final m = CurrencyFormatter.format(-diferencia, simbolo);
-      texto = largo ? 'Faltan $m' : '−$m';
-      color = AppTheme.error;
-    }
+    final e = _estadoDiferencia(diferencia, simbolo);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: e.color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: e.color.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        children: [
+          Icon(e.icono, color: e.color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              e.texto,
+              style: TextStyle(
+                color: e.color,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EtiquetaDiferencia extends StatelessWidget {
+  const _EtiquetaDiferencia({required this.diferencia, required this.simbolo});
+  final double diferencia;
+  final String simbolo;
+
+  @override
+  Widget build(BuildContext context) {
+    final e = _estadoDiferencia(diferencia, simbolo);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
+        color: e.color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
-        texto,
+        e.texto,
         style: TextStyle(
-          color: color == AppTheme.warning ? const Color(0xFF9A6B00) : color,
+          color: e.color,
           fontWeight: FontWeight.bold,
-          fontSize: largo ? 14 : 12,
+          fontSize: 12,
         ),
       ),
-    );
-  }
-}
-
-class _MetodosResumen extends StatelessWidget {
-  const _MetodosResumen({
-    required this.totales,
-    required this.conteos,
-    required this.simbolo,
-  });
-  final Map<String, double> totales;
-  final Map<String, int> conteos;
-  final String simbolo;
-
-  @override
-  Widget build(BuildContext context) {
-    final claves = _ordenarMetodos(totales.keys);
-    final total = totales.values.fold(0.0, (s, v) => s + v);
-    final n = conteos.values.fold(0, (s, v) => s + v);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Ventas por método de pago',
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        if (claves.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: Text(
-              'Todavía no hay ventas en este turno',
-              style: TextStyle(color: AppTheme.textSecondary),
-            ),
-          ),
-        for (final k in claves)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 5),
-            child: Row(
-              children: [
-                Icon(
-                  MetodosPagoConfig.icons[k] ?? Icons.payments_rounded,
-                  size: 20,
-                  color: MetodosPagoConfig.colors[k] ?? AppTheme.primary,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    '${MetodosPagoConfig.label(k)} (${conteos[k] ?? 0})',
-                  ),
-                ),
-                Text(
-                  CurrencyFormatter.format(totales[k] ?? 0, simbolo),
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-          ),
-        if (claves.isNotEmpty) ...[
-          const Divider(height: 20),
-          _FilaMonto(
-            'Total vendido ($n)',
-            CurrencyFormatter.format(total, simbolo),
-            bold: true,
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-// ============================================================
-// DETALLE DE UN CIERRE
-// ============================================================
-class DetalleCajaScreen extends StatefulWidget {
-  const DetalleCajaScreen({super.key, required this.caja, required this.simbolo});
-  final Caja caja;
-  final String simbolo;
-
-  @override
-  State<DetalleCajaScreen> createState() => _DetalleCajaScreenState();
-}
-
-class _DetalleCajaScreenState extends State<DetalleCajaScreen> {
-  List<MovimientoCaja> _movs = [];
-
-  Caja get _c => widget.caja;
-  String _q(double v) => CurrencyFormatter.format(v, widget.simbolo);
-
-  @override
-  void initState() {
-    super.initState();
-    DatabaseService.instance.obtenerMovimientosCaja(_c.id).then((m) {
-      if (mounted) setState(() => _movs = m);
-    });
-  }
-
-  String _textoResumen() {
-    final b = StringBuffer()
-      ..writeln('${AppConfig.nombre} - Cierre de caja')
-      ..writeln('Apertura: ${_fechaFmt.format(_c.fechaApertura)}')
-      ..writeln(
-        'Cierre: ${_c.fechaCierre == null ? '-' : _fechaFmt.format(_c.fechaCierre!)}',
-      )
-      ..writeln('')
-      ..writeln('Fondo inicial: ${_q(_c.fondoInicial)}')
-      ..writeln('Ventas (${_c.numVentas ?? 0}): ${_q(_c.totalVentas ?? 0)}');
-    for (final k in _ordenarMetodos(_c.detalleMetodos.keys)) {
-      final d = _c.detalleMetodos[k]!;
-      b.writeln(
-        '  ${MetodosPagoConfig.label(k)} (${d['n'] ?? 0}): ${_q((d['total'] ?? 0).toDouble())}',
-      );
-    }
-    b
-      ..writeln('Ingresos: ${_q(_c.totalIngresos ?? 0)}')
-      ..writeln('Gastos: ${_q(_c.totalGastos ?? 0)}')
-      ..writeln('')
-      ..writeln('Efectivo esperado: ${_q(_c.efectivoEsperado ?? 0)}')
-      ..writeln('Efectivo contado: ${_q(_c.efectivoContado ?? 0)}')
-      ..writeln('Diferencia: ${_q(_c.diferencia ?? 0)}');
-    if (_c.nota != null) b.writeln('Nota: ${_c.nota}');
-    return b.toString();
-  }
-
-  Future<void> _compartir() async {
-    final ok = await WhatsAppShare.enviar(texto: _textoResumen());
-    if (!ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No se pudo compartir'),
-          backgroundColor: AppTheme.error,
-        ),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final totales = <String, double>{};
-    final conteos = <String, int>{};
-    _c.detalleMetodos.forEach((k, d) {
-      totales[k] = (d['total'] ?? 0).toDouble();
-      conteos[k] = (d['n'] ?? 0).toInt();
-    });
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Cierre de caja'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.share_rounded, color: AppTheme.primary),
-            onPressed: _compartir,
-            tooltip: 'Compartir resumen',
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: ListView(
-        padding: listBottomPadding(context, top: 8),
-        children: [
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: 6),
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: AppTheme.primaryGradient,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              children: [
-                const Text(
-                  'Efectivo contado',
-                  style: TextStyle(color: Colors.white70, fontSize: 13),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  _q(_c.efectivoContado ?? 0),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: _EtiquetaDiferencia(
-                    diferencia: _c.diferencia ?? 0,
-                    simbolo: widget.simbolo,
-                    largo: true,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          _bloque(
-            Column(
-              children: [
-                _FilaMonto('Apertura', _fechaFmt.format(_c.fechaApertura)),
-                _FilaMonto(
-                  'Cierre',
-                  _c.fechaCierre == null ? '-' : _fechaFmt.format(_c.fechaCierre!),
-                ),
-                const Divider(height: 20),
-                _FilaMonto('Fondo inicial', _q(_c.fondoInicial)),
-                _FilaMonto('+ Ventas en efectivo', _q(totales['efectivo'] ?? 0)),
-                _FilaMonto('+ Ingresos', _q(_c.totalIngresos ?? 0)),
-                _FilaMonto(
-                  '− Gastos',
-                  _q(_c.totalGastos ?? 0),
-                  color: AppTheme.error,
-                ),
-                const Divider(height: 20),
-                _FilaMonto(
-                  'Efectivo esperado',
-                  _q(_c.efectivoEsperado ?? 0),
-                  bold: true,
-                ),
-                _FilaMonto(
-                  'Efectivo contado',
-                  _q(_c.efectivoContado ?? 0),
-                  bold: true,
-                ),
-              ],
-            ),
-          ),
-          _bloque(
-            _MetodosResumen(
-              totales: totales,
-              conteos: conteos,
-              simbolo: widget.simbolo,
-            ),
-          ),
-          if (_movs.isNotEmpty)
-            _bloque(
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Movimientos de efectivo',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  for (final m in _movs)
-                    _FilaMonto(
-                      m.concepto.isEmpty
-                          ? (m.esGasto ? 'Gasto' : 'Ingreso')
-                          : m.concepto,
-                      '${m.esGasto ? '−' : '+'} ${_q(m.monto)}',
-                      color: m.esGasto ? AppTheme.error : AppTheme.success,
-                    ),
-                ],
-              ),
-            ),
-          if (_c.nota != null)
-            _bloque(
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Nota',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(_c.nota!),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _bloque(Widget child) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.bgWhite,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: child,
     );
   }
 }

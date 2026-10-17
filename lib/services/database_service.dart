@@ -21,7 +21,7 @@ class DatabaseService {
     final path = join(dbPath, filePath);
     return await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -52,29 +52,26 @@ class DatabaseService {
         "ALTER TABLE items_venta ADD COLUMN tipo_venta TEXT NOT NULL DEFAULT 'unidad'",
       );
     }
-    if (oldVersion < 4) {
+    if (oldVersion < 5) {
+      // La caja por turnos de la versión 4 se reemplazó por cierres por periodo.
+      await db.execute('DROP TABLE IF EXISTS movimientos_caja');
+      await db.execute('DROP TABLE IF EXISTS cajas');
       await _crearTablasCaja(db);
     }
   }
 
   Future<void> _crearTablasCaja(Database db) async {
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS cajas (
-        id TEXT PRIMARY KEY, fecha_apertura TEXT NOT NULL, fondo_inicial REAL NOT NULL DEFAULT 0,
-        fecha_cierre TEXT, efectivo_contado REAL, efectivo_esperado REAL, diferencia REAL,
-        total_ventas REAL, num_ventas INTEGER, total_ingresos REAL, total_gastos REAL,
-        detalle_metodos TEXT, nota TEXT
-      )
-    ''');
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS movimientos_caja (
-        id TEXT PRIMARY KEY, caja_id TEXT NOT NULL, tipo TEXT NOT NULL,
-        monto REAL NOT NULL, concepto TEXT, fecha TEXT NOT NULL,
-        FOREIGN KEY (caja_id) REFERENCES cajas (id)
+      CREATE TABLE IF NOT EXISTS cierres_caja (
+        id TEXT PRIMARY KEY, periodo TEXT NOT NULL, desde TEXT NOT NULL, hasta TEXT NOT NULL,
+        fecha_cierre TEXT NOT NULL, fondo_inicial REAL NOT NULL DEFAULT 0,
+        efectivo_periodo REAL NOT NULL DEFAULT 0, efectivo_esperado REAL NOT NULL DEFAULT 0,
+        efectivo_contado REAL, diferencia REAL, total_vendido REAL NOT NULL DEFAULT 0,
+        num_ventas INTEGER NOT NULL DEFAULT 0, ganancia REAL, detalle_metodos TEXT, nota TEXT
       )
     ''');
     await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_mov_caja ON movimientos_caja (caja_id)',
+      'CREATE INDEX IF NOT EXISTS idx_cierres_fecha ON cierres_caja (fecha_cierre)',
     );
   }
 
@@ -290,58 +287,15 @@ class DatabaseService {
     await db.delete('categorias', where: 'nombre = ?', whereArgs: [nombre]);
   }
 
-  // ============ CAJA (cuadre) ============
+  // ============ CUADRE DE CAJA ============
 
-  /// Caja abierta actual, o null si no hay turno abierto.
-  Future<Caja?> obtenerCajaAbierta() async {
+  /// Ventas del periodo por método de pago y ganancia.
+  Future<ResumenCuadre> resumenCuadre(DateTime desde, DateTime hasta) async {
     final db = await database;
-    final maps = await db.query('cajas',
-        where: 'fecha_cierre IS NULL', orderBy: 'fecha_apertura DESC', limit: 1);
-    if (maps.isEmpty) return null;
-    return Caja.fromMap(maps.first);
-  }
-
-  Future<Caja> abrirCaja(double fondoInicial) async {
-    final db = await database;
-    final caja = Caja(
-      id: const Uuid().v4(),
-      fechaApertura: DateTime.now(),
-      fondoInicial: redondear2(fondoInicial),
-    );
-    await db.insert('cajas', caja.toMap());
-    return caja;
-  }
-
-  Future<void> agregarMovimientoCaja(MovimientoCaja m) async {
-    final db = await database;
-    await db.insert('movimientos_caja', m.toMap());
-  }
-
-  Future<void> eliminarMovimientoCaja(String id) async {
-    final db = await database;
-    await db.delete('movimientos_caja', where: 'id = ?', whereArgs: [id]);
-  }
-
-  Future<List<MovimientoCaja>> obtenerMovimientosCaja(String cajaId) async {
-    final db = await database;
-    final maps = await db.query('movimientos_caja',
-        where: 'caja_id = ?', whereArgs: [cajaId], orderBy: 'fecha DESC');
-    return maps.map((m) => MovimientoCaja.fromMap(m)).toList();
-  }
-
-  /// Calcula los números de una caja: ventas desde su apertura (hasta el cierre
-  /// si ya está cerrada) agrupadas por método de pago, más ingresos y gastos.
-  Future<ResumenCaja> calcularResumenCaja(Caja caja) async {
-    final db = await database;
-    final args = <Object?>[caja.fechaApertura.toIso8601String()];
-    var where = 'fecha >= ?';
-    if (caja.fechaCierre != null) {
-      where += ' AND fecha <= ?';
-      args.add(caja.fechaCierre!.toIso8601String());
-    }
+    final args = <Object?>[desde.toIso8601String(), hasta.toIso8601String()];
     final filas = await db.rawQuery(
       'SELECT metodo_pago, COUNT(*) AS n, COALESCE(SUM(total), 0) AS total '
-      'FROM ventas WHERE $where GROUP BY metodo_pago',
+      'FROM ventas WHERE fecha >= ? AND fecha <= ? GROUP BY metodo_pago',
       args,
     );
     final porMetodo = <String, double>{};
@@ -352,65 +306,51 @@ class DatabaseService {
       conteo[metodo] = (f['n'] as num).toInt();
     }
 
-    final movs = await obtenerMovimientosCaja(caja.id);
-    double ingresos = 0, gastos = 0;
-    for (final m in movs) {
-      if (m.esGasto) {
-        gastos += m.monto;
-      } else {
-        ingresos += m.monto;
-      }
+    // Ganancia = (precio de venta - precio de compra) de cada línea - descuentos.
+    // Si ningún producto vendido tiene precio de compra, no se muestra.
+    final g = await db.rawQuery(
+      'SELECT COALESCE(SUM(CASE WHEN i.tipo_venta = \'peso\' '
+      'THEN (i.precio_unitario - i.precio_compra) * i.cantidad / 1000.0 '
+      'ELSE (i.precio_unitario - i.precio_compra) * i.cantidad END), 0) AS g, '
+      'COALESCE(MAX(CASE WHEN i.precio_compra > 0 THEN 1 ELSE 0 END), 0) AS hay_costo '
+      'FROM items_venta i JOIN ventas v ON v.id = i.venta_id '
+      'WHERE v.fecha >= ? AND v.fecha <= ?',
+      args,
+    );
+    final d = await db.rawQuery(
+      'SELECT COALESCE(SUM(descuento), 0) AS d FROM ventas '
+      'WHERE fecha >= ? AND fecha <= ?',
+      args,
+    );
+    double? ganancia;
+    if (((g.first['hay_costo'] as num?) ?? 0) > 0) {
+      ganancia = redondear2(
+        (g.first['g'] as num).toDouble() - (d.first['d'] as num).toDouble(),
+      );
     }
-    return ResumenCaja(
-      fondoInicial: caja.fondoInicial,
+    return ResumenCuadre(
       ventasPorMetodo: porMetodo,
       conteoPorMetodo: conteo,
-      ingresos: redondear2(ingresos),
-      gastos: redondear2(gastos),
+      ganancia: ganancia,
     );
   }
 
-  /// Cierra la caja guardando el resumen definitivo y la diferencia contra
-  /// el efectivo contado. diferencia > 0 = sobra, < 0 = falta.
-  Future<Caja> cerrarCaja(Caja caja, double efectivoContado, {String? nota}) async {
+  Future<void> guardarCierre(CierreCaja c) async {
     final db = await database;
-    final cierre = DateTime.now();
-    final resumen = await calcularResumenCaja(
-      Caja(
-        id: caja.id,
-        fechaApertura: caja.fechaApertura,
-        fondoInicial: caja.fondoInicial,
-        fechaCierre: cierre,
-      ),
-    );
-    final contado = redondear2(efectivoContado);
-    final cerrada = Caja(
-      id: caja.id,
-      fechaApertura: caja.fechaApertura,
-      fondoInicial: caja.fondoInicial,
-      fechaCierre: cierre,
-      efectivoContado: contado,
-      efectivoEsperado: resumen.efectivoEsperado,
-      diferencia: redondear2(contado - resumen.efectivoEsperado),
-      totalVentas: redondear2(resumen.totalVentas),
-      numVentas: resumen.numVentas,
-      totalIngresos: resumen.ingresos,
-      totalGastos: resumen.gastos,
-      detalleMetodos: resumen.detalleMetodos,
-      nota: (nota == null || nota.trim().isEmpty) ? null : nota.trim(),
-    );
-    await db.update('cajas', cerrada.toMap(),
-        where: 'id = ?', whereArgs: [caja.id]);
-    return cerrada;
+    await db.insert('cierres_caja', c.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  Future<List<Caja>> obtenerCajasCerradas({int limite = 60}) async {
+  Future<List<CierreCaja>> obtenerCierres({int limite = 60}) async {
     final db = await database;
-    final maps = await db.query('cajas',
-        where: 'fecha_cierre IS NOT NULL',
-        orderBy: 'fecha_cierre DESC',
-        limit: limite);
-    return maps.map((m) => Caja.fromMap(m)).toList();
+    final maps = await db.query('cierres_caja',
+        orderBy: 'fecha_cierre DESC', limit: limite);
+    return maps.map((m) => CierreCaja.fromMap(m)).toList();
+  }
+
+  Future<void> eliminarCierre(String id) async {
+    final db = await database;
+    await db.delete('cierres_caja', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<void> close() async {

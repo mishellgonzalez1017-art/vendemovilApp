@@ -1190,8 +1190,8 @@ class _ScannerPosScreenState extends State<ScannerPosScreen> {
               ),
               _buildMenuItem(
                 Icons.point_of_sale_rounded,
-                'Caja',
-                'Abrir turno y cuadrar efectivo',
+                'Cuadre de caja',
+                'Ventas por método y efectivo del cajón',
                 () {
                   Navigator.pop(ctx);
                   _navigateTo(const CajaScreen());
