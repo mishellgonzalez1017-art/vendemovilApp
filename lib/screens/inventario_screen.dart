@@ -1,10 +1,10 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../services/database_service.dart';
 import '../models/producto.dart';
 import 'producto_form_screen.dart';
 import '../utils/safe_area_padding.dart';
+import '../utils/foto_producto.dart';
 import '../utils/currency_formatter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'scanner_screen.dart';
@@ -293,7 +293,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
                   borderRadius: BorderRadius.circular(12),
                   image: p.imagenUrl != null
                       ? DecorationImage(
-                          image: FileImage(File(p.imagenUrl!)),
+                          image: fotoProducto(p.imagenUrl!, ancho: 150),
                           fit: BoxFit.cover,
                         )
                       : null,

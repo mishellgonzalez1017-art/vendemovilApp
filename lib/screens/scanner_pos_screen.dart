@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -8,6 +7,7 @@ import '../theme/app_theme.dart';
 import '../services/database_service.dart';
 import '../providers/carrito_provider.dart';
 import '../utils/safe_area_padding.dart';
+import '../utils/foto_producto.dart';
 import '../utils/currency_formatter.dart';
 import '../utils/peso_formatter.dart';
 import '../utils/sound_player.dart';
@@ -240,7 +240,13 @@ class _ScannerPosScreenState extends State<ScannerPosScreen> {
     final categorias = await _db.obtenerCategorias();
     if (!mounted) return;
 
-    showModalBottomSheet(
+    // Con la hoja abierta no hace falta que la cámara siga analizando
+    // imágenes: se pausa para que el teléfono no se trabe.
+    final reanudar = _cameraOn;
+    if (reanudar) await _scannerCtrl.stop();
+    if (!mounted) return;
+
+    await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -380,107 +386,7 @@ class _ScannerPosScreenState extends State<ScannerPosScreen> {
                                 itemCount: productosFiltrados.length,
                                 itemBuilder: (context, i) {
                                   final p = productosFiltrados[i];
-                                  return GestureDetector(
-                                    onTap: () => _onCatalogTap(context, p, carrito),
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.bgWhite,
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(
-                                          color: AppTheme.border,
-                                        ),
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.stretch,
-                                        children: [
-                                          Expanded(
-                                            flex: 3,
-                                            child: ClipRRect(
-                                              borderRadius:
-                                                  const BorderRadius.vertical(
-                                                    top: Radius.circular(12),
-                                                  ),
-                                              child: p.imagenUrl != null
-                                                  ? Image.file(
-                                                      File(p.imagenUrl!),
-                                                      fit: BoxFit.cover,
-                                                    )
-                                                  : Container(
-                                                      color: AppTheme.primary
-                                                          .withValues(
-                                                            alpha: 0.1,
-                                                          ),
-                                                      child: const Icon(
-                                                        Icons.inventory_2,
-                                                        color: AppTheme.primary,
-                                                        size: 32,
-                                                      ),
-                                                    ),
-                                            ),
-                                          ),
-                                          Expanded(
-                                            flex: 2,
-                                            child: Padding(
-                                              padding: const EdgeInsets.all(
-                                                8.0,
-                                              ),
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    p.nombre,
-                                                    maxLines: 2,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    style: const TextStyle(
-                                                      fontSize: 11,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                      height: 1.1,
-                                                    ),
-                                                  ),
-                                                  const Spacer(),
-                                                  Text(
-                                                    p.precioLabel(_formatMoney),
-                                                    maxLines: 1,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    style: const TextStyle(
-                                                      fontSize: 11,
-                                                      color: AppTheme.primary,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 2),
-                                                  Text(
-                                                    p.formatoStock,
-                                                    maxLines: 1,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    style: TextStyle(
-                                                      fontSize: 10,
-                                                      color: p.stock <=
-                                                              p.stockMinimo
-                                                          ? AppTheme.error
-                                                          : AppTheme
-                                                                .textSecondary,
-                                                      fontWeight: p.stock <=
-                                                              p.stockMinimo
-                                                          ? FontWeight.bold
-                                                          : FontWeight.normal,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
+                                  return _tarjetaCatalogo(context, p, carrito);
                                 },
                               ),
                       ),
@@ -493,6 +399,94 @@ class _ScannerPosScreenState extends State<ScannerPosScreen> {
           },
         );
       },
+    );
+    if (mounted && reanudar && _cameraOn) _scannerCtrl.start();
+  }
+
+  /// Tarjeta de un producto en el catálogo. La foto ocupa el espacio que sobra
+  /// y el texto mide lo que necesita, así nunca se desborda aunque el teléfono
+  /// tenga la letra grande.
+  Widget _tarjetaCatalogo(
+    BuildContext context,
+    Producto p,
+    CarritoProvider carrito,
+  ) {
+    final stockBajo = p.stock <= p.stockMinimo;
+    final placeholder = Container(
+      color: AppTheme.primary.withValues(alpha: 0.1),
+      alignment: Alignment.center,
+      child: const Icon(Icons.inventory_2, color: AppTheme.primary, size: 32),
+    );
+    return GestureDetector(
+      onTap: () => _onCatalogTap(context, p, carrito),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppTheme.bgWhite,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(12),
+                ),
+                child: p.imagenUrl != null
+                    ? Image(
+                        image: fotoProducto(p.imagenUrl!, ancho: 300),
+                        fit: BoxFit.cover,
+                        gaplessPlayback: true,
+                        errorBuilder: (_, _, _) => placeholder,
+                      )
+                    : placeholder,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    p.nombre,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      height: 1.1,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    p.precioLabel(_formatMoney),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppTheme.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    p.formatoStock,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: stockBajo ? AppTheme.error : AppTheme.textSecondary,
+                      fontWeight: stockBajo ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -837,8 +831,9 @@ class _ScannerPosScreenState extends State<ScannerPosScreen> {
                                                   BorderRadius.circular(10),
                                               image: item.imagenUrl != null
                                                   ? DecorationImage(
-                                                      image: FileImage(
-                                                        File(item.imagenUrl!),
+                                                      image: fotoProducto(
+                                                        item.imagenUrl!,
+                                                        ancho: 130,
                                                       ),
                                                       fit: BoxFit.cover,
                                                     )
@@ -1150,12 +1145,13 @@ class _ScannerPosScreenState extends State<ScannerPosScreen> {
   void _mostrarMenu() {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: AppTheme.bgWhite,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (ctx) => SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
           child: Column(
             mainAxisSize: MainAxisSize.min,

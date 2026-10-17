@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -8,6 +7,7 @@ import '../providers/carrito_provider.dart';
 import '../services/printer_service.dart';
 import '../utils/currency_formatter.dart';
 import '../utils/metodos_pago_config.dart';
+import '../utils/foto_producto.dart';
 import '../utils/sound_player.dart';
 import '../utils/whatsapp_share.dart';
 import '../widgets/safe_bottom_bar.dart';
@@ -426,8 +426,8 @@ class _RevisarOrdenScreenState extends State<RevisarOrdenScreen> {
                         width: 2,
                       ),
                     ),
-                    child: Image.file(
-                      File(_qrPathActual()!),
+                    child: Image(
+                      image: fotoProducto(_qrPathActual()!, ancho: 600),
                       width: 200,
                       height: 200,
                       fit: BoxFit.cover,

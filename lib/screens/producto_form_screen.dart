@@ -1,9 +1,9 @@
-import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../theme/app_theme.dart';
 import '../utils/safe_area_padding.dart';
+import '../utils/foto_producto.dart';
 import '../models/producto.dart';
 import '../services/database_service.dart';
 import '../utils/peso_formatter.dart';
@@ -87,7 +87,13 @@ class _ProductoFormScreenState extends State<ProductoFormScreen> {
 
   Future<void> _seleccionarImagen() async {
     final picker = ImagePicker();
-    final image = await picker.pickImage(source: ImageSource.gallery);
+    // Se reduce al elegirla: así la foto pesa poco y la app no se traba.
+    final image = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 800,
+      maxHeight: 800,
+      imageQuality: 80,
+    );
     if (image != null) {
       setState(() => _imagenUrl = image.path);
     }
@@ -306,7 +312,7 @@ class _ProductoFormScreenState extends State<ProductoFormScreen> {
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(color: AppTheme.border),
                     image: _imagenUrl != null
-                        ? DecorationImage(image: FileImage(File(_imagenUrl!)), fit: BoxFit.cover)
+                        ? DecorationImage(image: fotoProducto(_imagenUrl!, ancho: 400), fit: BoxFit.cover)
                         : null,
                   ),
                   child: _imagenUrl == null
