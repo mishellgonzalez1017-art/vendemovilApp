@@ -72,7 +72,7 @@ class PrinterService {
       mac: prefs.getString('impresora_mac'),
       printerName: prefs.getString('impresora_nombre'),
       moneda: prefs.getString('moneda_simbolo') ?? 'Q',
-      vendedor: prefs.getString('vendedor_activo'),
+      vendedor: prefs.getString('vendedor_activo') ?? '',
     );
   }
 

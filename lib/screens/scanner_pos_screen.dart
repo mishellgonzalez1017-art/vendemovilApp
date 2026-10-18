@@ -138,6 +138,7 @@ class _ScannerPosScreenState extends State<ScannerPosScreen> {
       await Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
     }
     if (mounted) {
+      _cargarAjustes(); // por si cambió la moneda u otro ajuste
       _scannerCtrl.start();
     }
   }
